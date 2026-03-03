@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="FastbootCLI/FastbootCLI.csproj" />
+  <Project Path="FirmwareKit.Comm.Fastboot/FirmwareKit.Comm.Fastboot.csproj" />
+  <Project Path="FirmwareKit.Comm.Fastboot.Tests/FirmwareKit.Comm.Fastboot.Tests.csproj" />
+</Solution>
