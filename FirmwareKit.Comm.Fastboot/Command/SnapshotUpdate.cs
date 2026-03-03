@@ -10,12 +10,12 @@ namespace FirmwareKit.Comm.Fastboot
         /// </summary>
         public FastbootResponse SnapshotUpdate(string action = "cancel")
         {
-            if (action != "cancel" && action != "merge")
-                throw new ArgumentException("SnapshotUpdate action must be 'cancel' or 'merge'");
+            // AOSP SnapshotUpdateCommand: prolog_("Snapshot %s", command.c_str()); RawCommand(FB_CMD_SNAPSHOT_UPDATE ":" + command, ...);
+            NotifyReceived(FastbootState.Text, $"Snapshot {action}");
             var res = RawCommand("snapshot-update:" + action);
             if (res.Response.Contains("reboot fastboot", StringComparison.OrdinalIgnoreCase))
             {
-                NotifyCurrentStep("Device requested reboot to fastbootd to finish snapshot action...");
+                NotifyReceived(FastbootState.Text, "Device requested reboot to fastbootd to finish snapshot action...");
                 Reboot("fastboot");
             }
             return res;

@@ -13,17 +13,16 @@ namespace FirmwareKit.Comm.Fastboot
         public FastbootResponse DownloadData(byte[] data)
         {
             FastbootResponse response = RawCommand("download:" + data.Length.ToString("x8"));
-            if (response.Result == FastbootState.Fail)
+            if (response.Result != FastbootState.Data)
                 return response;
-            Transport.Write(data, data.Length);
-            var res = HandleResponse();
-            if (res.Result == FastbootState.Success)
+
+            long written = Transport.Write(data, data.Length);
+            if (written != data.Length)
             {
-                using var sha256 = SHA256.Create();
-                byte[] hash = sha256.ComputeHash(data);
-                res.Hash = BitConverter.ToString(hash).Replace("-", "").ToLower();
+                return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{data.Length}" };
             }
-            return res;
+
+            return HandleResponse();
         }
     }
 }

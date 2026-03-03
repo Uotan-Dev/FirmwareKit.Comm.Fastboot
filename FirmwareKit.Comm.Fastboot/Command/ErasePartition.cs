@@ -6,10 +6,9 @@ namespace FirmwareKit.Comm.Fastboot
     {
         public FastbootResponse ErasePartition(string partition)
         {
-            if (HasSlot(partition))
-            {
-                partition += "_" + GetCurrentSlot();
-            }
+            // AOSP erase does not automatically append slot.
+            // FastbootDriver::Erase(const std::string& partition, ...)
+            // return RawCommand(FB_CMD_ERASE ":" + partition, ...);
             return RawCommand("erase:" + partition);
         }
     }

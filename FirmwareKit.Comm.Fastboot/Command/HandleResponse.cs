@@ -44,24 +44,31 @@ namespace FirmwareKit.Comm.Fastboot
                 }
 
                 string prefix = devStatus.Substring(0, 4);
-                string content = devStatus.Substring(4);
+                string content = devStatus.Trim().Substring(4);
 
-                if (prefix == "OKAY" || prefix == "FAIL")
+                if (prefix == "OKAY")
                 {
-                    response.Result = prefix == "OKAY" ? FastbootState.Success : FastbootState.Fail;
+                    response.Result = FastbootState.Success;
                     response.Response = content;
+                    return response;
+                }
+                else if (prefix == "FAIL")
+                {
+                    response.Result = FastbootState.Fail;
+                    response.Response = content;
+                    // AOSP: FAIL is a terminal state
                     return response;
                 }
                 else if (prefix == "INFO")
                 {
                     response.Info.Add(content);
-                    ReceivedFromDevice?.Invoke(this, new FastbootReceivedFromDeviceEventArgs(FastbootState.Info, content));
-                    start = DateTime.Now;
+                    NotifyReceived(FastbootState.Info, content);
+                    start = DateTime.Now; // Reset timeout for progress
                 }
                 else if (prefix == "TEXT")
                 {
                     response.Text += content;
-                    ReceivedFromDevice?.Invoke(this, new FastbootReceivedFromDeviceEventArgs(FastbootState.Text, null, content));
+                    NotifyReceived(FastbootState.Text, null, content);
                     start = DateTime.Now;
                 }
                 else if (prefix == "DATA")

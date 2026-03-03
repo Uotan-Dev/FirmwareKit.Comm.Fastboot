@@ -1,11 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;net6.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Authors>SharpFastboot Contributors</Authors>
+    <Description>A high-performance C# implementation of the Android Fastboot protocol, aligned with AOSP.</Description>
+    <PackageProjectUrl>https://github.com/your-repo/SharpFastboot</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>

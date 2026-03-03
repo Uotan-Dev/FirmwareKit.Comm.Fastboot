@@ -12,33 +12,30 @@ namespace FirmwareKit.Comm.Fastboot
         /// </summary>
         public FastbootResponse DownloadData(Stream stream, long length, bool onEvent = true)
         {
+            // AOSP uses %08" PRIx32 which is 8 chars hex with leading zeros
             FastbootResponse response = RawCommand("download:" + length.ToString("x8"));
-            if (response.Result == FastbootState.Fail)
+            if (response.Result != FastbootState.Data)
                 return response;
 
-            using var sha256 = SHA256.Create();
             byte[] buffer = new byte[OnceSendDataSize];
-            long bytesRead = 0;
-            while (bytesRead < length)
+            long bytesWritten = 0;
+            while (bytesWritten < length)
             {
-                int toRead = (int)Math.Min(OnceSendDataSize, length - bytesRead);
+                int toRead = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
                 int readSize = stream.Read(buffer, 0, toRead);
                 if (readSize <= 0) break;
 
-                sha256.TransformBlock(buffer, 0, readSize, null, 0);
-                Transport.Write(buffer, readSize);
-                bytesRead += readSize;
+                long written = Transport.Write(buffer, readSize);
+                if (written != readSize)
+                {
+                    return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{readSize}" };
+                }
+                bytesWritten += written;
                 if (onEvent)
-                    NotifyProgress(bytesRead, length);
+                    NotifyProgress(bytesWritten, length);
             }
-            sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
 
-            var res = HandleResponse();
-            if (res.Result == FastbootState.Success && sha256.Hash != null)
-            {
-                res.Hash = BitConverter.ToString(sha256.Hash).Replace("-", "").ToLower();
-            }
-            return res;
+            return HandleResponse();
         }
     }
 }

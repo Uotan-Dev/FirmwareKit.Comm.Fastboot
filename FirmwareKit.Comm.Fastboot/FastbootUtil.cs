@@ -8,13 +8,13 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace FirmwareKit.Comm.Fastboot
+namespace FirmwareKit.Comm.Fastboot;
+
+public partial class FastbootUtil
 {
-    public partial class FastbootUtil
-    {
-        /// <summary>
-        /// Determines whether the device is in fastbootd (userspace) mode.
-        /// </summary>
+    /// <summary>
+    /// Determines whether the device is in fastbootd (userspace) mode.
+    /// </summary>
         public bool IsUserspace()
         {
             try
@@ -200,13 +200,13 @@ namespace FirmwareKit.Comm.Fastboot
         }
 
         /// <summary>
-        /// Gets a single attribute (with caching)
+        /// Gets a single attribute (with caching if enabled)
         /// </summary>
-        public string GetVar(string key)
+        public string GetVar(string key, bool useCache = true)
         {
-            if (_varCache.TryGetValue(key, out string? cached)) return cached;
+            if (useCache && _varCache.TryGetValue(key, out string? cached)) return cached;
             var res = RawCommand("getvar:" + key).ThrowIfError().Response;
-            _varCache[key] = res;
+            if (useCache) _varCache[key] = res;
             return res;
         }
 
@@ -1318,6 +1318,14 @@ namespace FirmwareKit.Comm.Fastboot
                         string part = Path.GetFileNameWithoutExtension(logImg);
                         if (IsLogicalOptimized(part))
                         {
+                            NotifyCurrentStep($"Preparing logical partition {part}...");
+                            try 
+                            { 
+                                // To align with AOSP behavior, we ensure the partition exists and is cleared
+                                CreateLogicalPartition(part, 0); 
+                            } 
+                            catch { /* Ignore if already exists or not supported */ }
+                            
                             try { ResizeLogicalPartition(part, 0); } catch { }
                         }
                     }
