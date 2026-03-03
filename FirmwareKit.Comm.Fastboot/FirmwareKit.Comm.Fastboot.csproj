@@ -8,11 +8,21 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Authors>SharpFastboot Contributors</Authors>
-    <Description>A high-performance C# implementation of the Android Fastboot protocol, aligned with AOSP.</Description>
-    <PackageProjectUrl>https://github.com/your-repo/SharpFastboot</PackageProjectUrl>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <Authors>ZZi_Cai</Authors>
+    <Description>A high-performance .NET implementation of the Android Fastboot protocol, strictly aligned with AOSP logic. Part of the FirmwareKit ecosystem.</Description>
+    <PackageProjectUrl>https://github.com/uotan-Dev/SharpFastboot</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/uotan-Dev/SharpFastboot</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>fastboot;android;firmware;flashing;usb;tcp;udp;adb</PackageTags>
+    <Version>1.0.0</Version>
+    <PackageId>FirmwareKit.Comm.Fastboot</PackageId>
+    <Product>FastbootCli</Product>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FirmwareKit.Lp" Version="1.0.0" />

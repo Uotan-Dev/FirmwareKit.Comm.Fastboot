@@ -1,7 +1,5 @@
 using FirmwareKit.Comm.Fastboot.DataModel;
-using FirmwareKit.Comm.Fastboot.Usb;
 using System.Text;
-using Xunit;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -45,7 +43,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             transport.EnqueueResponse("OKAY0.4");
 
             string output = util.GetVar("version");
-            
+
             Assert.Equal("0.4", output);
             Assert.Contains("getvar:version", transport.WrittenCommands);
         }
@@ -61,7 +59,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             transport.EnqueueResponse("OKAY");
 
             var response = util.RawCommand("oem dmesg");
-            
+
             Assert.Equal(FastbootState.Success, response.Result);
             Assert.Single(response.Info);
             Assert.Equal("this is an info line", response.Info[0]);

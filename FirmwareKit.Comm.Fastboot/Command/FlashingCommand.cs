@@ -1,12 +1,13 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+﻿using FirmwareKit.Comm.Fastboot.DataModel;
 
-namespace FirmwareKit.Comm.Fastboot
+namespace FirmwareKit.Comm.Fastboot;
+
+public partial class FastbootUtil
 {
-    public partial class FastbootUtil
-    {
-        /// <summary>
-        /// Executes Flashing sub-command (modern unlocking commands)
-        /// </summary>
-        public FastbootResponse FlashingCommand(string subCmd) => RawCommand("flashing " + subCmd);
-    }
+    /// <summary>
+    /// Executes Flashing sub-command (modern unlocking commands)
+    /// </summary>
+    public FastbootResponse FlashingCommand(string subCmd) => RawCommand("flashing " + subCmd);
+
+
 }

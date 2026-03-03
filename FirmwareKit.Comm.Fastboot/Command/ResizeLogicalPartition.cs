@@ -1,16 +1,17 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+﻿using FirmwareKit.Comm.Fastboot.DataModel;
 
-namespace FirmwareKit.Comm.Fastboot
+namespace FirmwareKit.Comm.Fastboot;
+
+public partial class FastbootUtil
 {
-    public partial class FastbootUtil
+    /// <summary>
+    /// Adjusts the size of a logical partition
+    /// </summary>
+    public FastbootResponse ResizeLogicalPartition(string partition, long size)
     {
-        /// <summary>
-        /// Adjusts the size of a logical partition
-        /// </summary>
-        public FastbootResponse ResizeLogicalPartition(string partition, long size)
-        {
-            EnsureUserspace();
-            return RawCommand($"resize-logical-partition:{partition}:{size}");
-        }
+        EnsureUserspace();
+        return RawCommand($"resize-logical-partition:{partition}:{size}");
     }
+
+
 }

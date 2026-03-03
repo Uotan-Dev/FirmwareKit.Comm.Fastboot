@@ -1,5 +1,5 @@
-using System.Text;
 using System.Globalization;
+using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

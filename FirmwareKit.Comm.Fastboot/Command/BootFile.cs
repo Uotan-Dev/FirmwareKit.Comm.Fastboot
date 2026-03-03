@@ -1,18 +1,18 @@
-using System.IO;
-using FirmwareKit.Comm.Fastboot.DataModel;
+﻿using FirmwareKit.Comm.Fastboot.DataModel;
 
-namespace FirmwareKit.Comm.Fastboot
+namespace FirmwareKit.Comm.Fastboot;
+
+public partial class FastbootUtil
 {
-    public partial class FastbootUtil
+    /// <summary>
+    /// Sends and guides the kernel image file
+    /// </summary>
+    public FastbootResponse Boot(string filePath)
     {
-        /// <summary>
-        /// Sends and guides the kernel image file
-        /// </summary>
-        public FastbootResponse Boot(string filePath)
-        {
-            using var fs = File.OpenRead(filePath);
-            DownloadData(fs, fs.Length).ThrowIfError();
-            return RawCommand("boot");
-        }
+        using var fs = File.OpenRead(filePath);
+        DownloadData(fs, fs.Length).ThrowIfError();
+        return RawCommand("boot");
     }
+
+
 }

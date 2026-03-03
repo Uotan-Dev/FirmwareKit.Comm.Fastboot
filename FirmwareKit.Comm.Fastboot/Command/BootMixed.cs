@@ -1,22 +1,22 @@
-using System.IO;
-using FirmwareKit.Comm.Fastboot.DataModel;
+﻿using FirmwareKit.Comm.Fastboot.DataModel;
 
-namespace FirmwareKit.Comm.Fastboot
+namespace FirmwareKit.Comm.Fastboot;
+
+public partial class FastbootUtil
 {
-    public partial class FastbootUtil
+    /// <summary>
+    /// Mixed packing and guiding the kernel
+    /// </summary>
+    public FastbootResponse Boot(string kernelPath, string? ramdiskPath = null, string? secondPath = null, string? dtbPath = null, string? cmdline = null, uint header_version = 0, uint base_addr = 0x10000000, uint page_size = 2048)
     {
-        /// <summary>
-        /// Mixed packing and guiding the kernel
-        /// </summary>
-        public FastbootResponse Boot(string kernelPath, string? ramdiskPath = null, string? secondPath = null, string? dtbPath = null, string? cmdline = null, uint header_version = 0, uint base_addr = 0x10000000, uint page_size = 2048)
-        {
-            byte[] kernel = File.ReadAllBytes(kernelPath);
-            byte[]? ramdisk = ramdiskPath != null ? File.ReadAllBytes(ramdiskPath) : null;
-            byte[]? second = secondPath != null ? File.ReadAllBytes(secondPath) : null;
-            byte[]? dtb = dtbPath != null ? File.ReadAllBytes(dtbPath) : null;
+        byte[] kernel = File.ReadAllBytes(kernelPath);
+        byte[]? ramdisk = ramdiskPath != null ? File.ReadAllBytes(ramdiskPath) : null;
+        byte[]? second = secondPath != null ? File.ReadAllBytes(secondPath) : null;
+        byte[]? dtb = dtbPath != null ? File.ReadAllBytes(dtbPath) : null;
 
-            byte[] bootImg = CreateBootImageVersioned(kernel, ramdisk, second, dtb, cmdline, null, header_version, base_addr, page_size);
-            return Boot(bootImg);
-        }
+        byte[] bootImg = CreateBootImageVersioned(kernel, ramdisk, second, dtb, cmdline, null, header_version, base_addr, page_size);
+        return Boot(bootImg);
     }
+
+
 }

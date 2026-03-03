@@ -1,8 +1,9 @@
-namespace FirmwareKit.Comm.Fastboot
+﻿namespace FirmwareKit.Comm.Fastboot;
+
+public interface IFastbootTransport : IDisposable
 {
-    public interface IFastbootTransport : IDisposable
-    {
-        byte[] Read(int length);
-        long Write(byte[] data, int length);
-    }
+    byte[] Read(int length);
+    long Write(byte[] data, int length);
+
+
 }

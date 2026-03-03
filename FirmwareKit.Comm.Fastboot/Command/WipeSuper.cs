@@ -1,12 +1,13 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+﻿using FirmwareKit.Comm.Fastboot.DataModel;
 
-namespace FirmwareKit.Comm.Fastboot
+namespace FirmwareKit.Comm.Fastboot;
+
+public partial class FastbootUtil
 {
-    public partial class FastbootUtil
-    {
-        /// <summary>
-        /// Clears Super partition metadata
-        /// </summary>
-        public FastbootResponse WipeSuper(string partition) => RawCommand("wipe-super:" + partition);
-    }
+    /// <summary>
+    /// Clears Super partition metadata
+    /// </summary>
+    public FastbootResponse WipeSuper(string partition) => RawCommand("wipe-super:" + partition);
+
+
 }
