@@ -1,9 +1,6 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
 using FirmwareKit.Comm.Fastboot.Backend.Network;
-using System.Collections.Generic;
+using FirmwareKit.Comm.Fastboot.DataModel;
 using System.Text;
-using System;
-using Xunit;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

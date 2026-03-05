@@ -15,7 +15,6 @@ public partial class FastbootUtil
             targetPartition = partition + "_" + GetCurrentSlot();
         }
 
-        // If size is not specified, try to get it from variables
         if (size == -1)
         {
             string szVar = GetVar("partition-size:" + targetPartition);

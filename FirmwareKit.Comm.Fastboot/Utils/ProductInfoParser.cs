@@ -75,8 +75,6 @@ internal class ProductInfoParser(FastbootUtil fastboot)
 
         string key = parts[0].Trim();
         string expectedValue = parts[1].Trim();
-
-        // Handle partition-exists special key
         if (key == "partition-exists")
         {
             if (_fastboot.PartitionExists(expectedValue)) return true;

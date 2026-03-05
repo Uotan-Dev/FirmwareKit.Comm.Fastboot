@@ -39,20 +39,13 @@ public class UdpTransport(string host, int port = 5554) : IFastbootTransport
     {
         _client.Client.ReceiveTimeout = _timeoutMs;
         _client.Client.SendTimeout = _timeoutMs;
-        
-        // AOSP udp.cpp uses kIdQuery (0x01) to get sequence number
+
         byte[] response = SendSinglePacket(PacketId.DeviceQuery, 0, PacketFlag.None, [], 0, 0, MaxTransmissionAttempts);
         if (response.Length < 2) throw new Exception("Invalid query response from target.");
-        
-        // Sequence number is in the data part of the response for Query
         _sequence = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(0, 2));
-
-        // Version (0x0001), Max Packet Size (0x0200 = 512 for kMinPacketSize)
         byte[] initData = new byte[4];
         BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(0, 2), 0x0001);
-        BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(2, 2), 512); 
-
-        // Initialization (0x02)
+        BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(2, 2), 512);
         response = SendSinglePacket(PacketId.Initialization, (ushort)_sequence, PacketFlag.None, initData, initData.Length, MaxTransmissionAttempts);
         if (response.Length < 4) throw new Exception("Invalid initialization response from target.");
 
@@ -106,10 +99,7 @@ public class UdpTransport(string host, int port = 5554) : IFastbootTransport
             {
                 IPEndPoint from = new IPEndPoint(IPAddress.Any, 0);
                 byte[] rxPacket = _client.Receive(ref from);
-
                 if (rxPacket.Length < HeaderSize) continue;
-
-                // Match Sequence and ID or Error
                 if (BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2)) == seq &&
                     (rxPacket[0] == (byte)id || rxPacket[0] == (byte)PacketId.Error))
                 {
@@ -133,7 +123,7 @@ public class UdpTransport(string host, int port = 5554) : IFastbootTransport
 
     public byte[] Read(int length)
     {
-        if (_readBuffer.Count == 0) // UDPSession handles command-response pairing. Content is buffered in _readBuffer.
+        if (_readBuffer.Count == 0)
         {
             return Array.Empty<byte>();
         }

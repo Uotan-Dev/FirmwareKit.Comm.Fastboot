@@ -1,8 +1,6 @@
 using FirmwareKit.Comm.Fastboot.Backend.Network;
 using System.Globalization;
 using System.Text;
-using System;
-using Xunit;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

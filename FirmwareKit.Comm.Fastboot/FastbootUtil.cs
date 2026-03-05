@@ -19,6 +19,21 @@ public partial class FastbootUtil : IDisposable
     }
 
     /// <summary>
+    /// Resets the transport (clears pipes/buffers)
+    /// </summary>
+    public void ResetTransport()
+    {
+        if (Transport is UsbDevice usb)
+        {
+            usb.Reset();
+        }
+        else if (Transport is TcpTransport tcp)
+        {
+            // TCP transport might need its own reset logic if implemented
+        }
+    }
+
+    /// <summary>
     /// Determines whether the device is in fastbootd (userspace) mode.
     /// </summary>
     public bool IsUserspace()
@@ -72,6 +87,7 @@ public partial class FastbootUtil : IDisposable
             _logicalPartitionsFromMetadata = null;
         }
     }
+
     public static LpMetadata ReadFromImageFile(string path)
     {
         using var stream = File.OpenRead(path);
@@ -80,7 +96,6 @@ public partial class FastbootUtil : IDisposable
 
     public static LpMetadata ReadFromImageStream(Stream stream)
     {
-
         long[] tryOffsets = [ MetadataFormat.LP_PARTITION_RESERVED_BYTES,
                       MetadataFormat.LP_PARTITION_RESERVED_BYTES + MetadataFormat.LP_METADATA_GEOMETRY_SIZE,
                       0 ];
@@ -95,14 +110,11 @@ public partial class FastbootUtil : IDisposable
                 if (stream.Read(buffer, 0, buffer.Length) == buffer.Length)
                 {
                     MetadataReader.ParseGeometry(buffer, out var geometry);
-
                     var metadataOffset = offset;
                     if (offset == MetadataFormat.LP_PARTITION_RESERVED_BYTES + MetadataFormat.LP_METADATA_GEOMETRY_SIZE)
                     {
-
                         metadataOffset -= MetadataFormat.LP_METADATA_GEOMETRY_SIZE;
                     }
-
                     stream.Seek(metadataOffset + (MetadataFormat.LP_METADATA_GEOMETRY_SIZE * 2), SeekOrigin.Begin);
                     var metadata = MetadataReader.ParseMetadata(geometry, stream);
                     LpLogger.Info($"Successfully parsed metadata: partitions={metadata.Partitions.Count}, groups={metadata.Groups.Count}");
@@ -115,7 +127,6 @@ public partial class FastbootUtil : IDisposable
                 continue;
             }
         }
-
         throw new InvalidDataException("Valid LpMetadataGeometry not found. The image may not be a super image or may be corrupted.");
     }
     public IFastbootTransport Transport { get; private set; }
@@ -260,7 +271,13 @@ public partial class FastbootUtil : IDisposable
     public string GetVar(string key, bool useCache = true)
     {
         if (useCache && _varCache.TryGetValue(key, out string? cached)) return cached;
-        var res = RawCommand("getvar:" + key).ThrowIfError().Response;
+        var resObj = RawCommand("getvar:" + key);
+        if (resObj.Result == FastbootState.Fail || resObj.Result == FastbootState.Timeout)
+        {
+            if (useCache) _varCache[key] = "";
+            return "";
+        }
+        var res = resObj.Response;
         if (useCache) _varCache[key] = res;
         return res;
     }
@@ -416,7 +433,8 @@ public partial class FastbootUtil : IDisposable
 
     public long GetMaxDownloadSize()
     {
-        var sizeStr = GetVar("max-download-size");
+        string? sizeStr = null;
+        try { sizeStr = GetVar("max-download-size"); } catch { }
         if (string.IsNullOrEmpty(sizeStr)) return SparseMaxDownloadSize;
 
         if (sizeStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
@@ -1075,10 +1093,7 @@ public partial class FastbootUtil : IDisposable
         var lines = infoContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         string currentSlot = slotOverride ?? GetCurrentSlot();
         string otherSlot = currentSlot == "a" ? "b" : "a";
-
-        // Preloads dynamic partition metadata to optimize IsLogical speed
         LoadLogicalPartitionsFromMetadata(Path.Combine(imageDir, "super_empty.img"));
-
         var commands = new List<List<string>>();
 
         foreach (var line in lines)
@@ -1096,16 +1111,12 @@ public partial class FastbootUtil : IDisposable
             }
             if (parts.Count > 0) commands.Add(parts);
         }
-
-        // AOSP Optimization: If we find logical partitions to flash, resize them all to 0 first 
-        // to ensure optimal placement in the super partition (when not using optimized super flash).
         if (IsUserspace())
         {
             foreach (var cmdParts in commands)
             {
                 if (cmdParts[0] == "flash")
                 {
-                    // Find partition name in arguments
                     string? part = GetPartitionFromArgs(cmdParts.GetRange(1, cmdParts.Count - 1));
                     if (part != null && IsLogicalOptimized(part))
                     {
@@ -1115,7 +1126,6 @@ public partial class FastbootUtil : IDisposable
             }
         }
 
-        // AOSP Optimized Flash Super: Group logical partitions and flash them more efficiently
         if (optimizeSuper && IsUserspace())
         {
             string emptyPath = Path.Combine(imageDir, "super_empty.img");
@@ -1128,14 +1138,13 @@ public partial class FastbootUtil : IDisposable
                     if (parts[0] == "flash")
                     {
                         string? part = GetPartitionFromArgs(parts.GetRange(1, parts.Count - 1));
-                        string? imgName = parts.Count > 2 ? parts[2] : part + ".img"; // Simple heuristic for img name
+                        string? imgName = parts.Count > 2 ? parts[2] : part + ".img";
                         if (part != null && IsLogicalOptimized(part))
                         {
                             string imgPath = Path.Combine(imageDir, imgName!);
                             if (File.Exists(imgPath))
                             {
                                 logicalPartitionsToFlash.Add((part, imgPath));
-                                // Remove from original commands so we don't flash it twice
                                 commands.RemoveAt(i);
                                 i--;
                             }
@@ -1190,7 +1199,6 @@ public partial class FastbootUtil : IDisposable
 
     private string? GetPartitionFromArgs(List<string> args)
     {
-        // Simple heuristic to find partition name in flash arguments
         foreach (var arg in args)
         {
             if (!arg.StartsWith("--")) return arg;
@@ -1218,8 +1226,6 @@ public partial class FastbootUtil : IDisposable
             string imgPath = Path.Combine(imageDir, imgName);
             if (File.Exists(imgPath))
             {
-                // AOSP: If it's a dynamic partition, to ensure optimal space allocation, we first resize it to 0.
-                // ResizeLogicalPartition internally ensures the device is in fastbootd (userspace) mode.
                 if (IsLogicalOptimized(partition))
                 {
                     try { ResizeLogicalPartition(partition, 0); } catch { }
@@ -1255,7 +1261,6 @@ public partial class FastbootUtil : IDisposable
     {
         CancelSnapshotIfNeeded();
 
-        // Preloads dynamic partition metadata to optimize IsLogical speed
         LoadLogicalPartitionsFromMetadata(Path.Combine(productOutDir, "super_empty.img"));
 
         string infoPath = Path.Combine(productOutDir, "fastboot-info.txt");
@@ -1307,12 +1312,8 @@ public partial class FastbootUtil : IDisposable
                 targetSlot = currentSlot == "a" ? "b" : "a";
                 isOther = true;
             }
-
-            // Flashes the specified slot
             if (IsVbmetaPartition(part)) FlashVbmeta(part, filePath);
             else FlashImage(part, filePath, targetSlot);
-
-            // If not _other image, and not skipping second slot and the partition supports A/B
             if (!isOther && !skipSecondary && HasSlot(part))
             {
                 string otherSlot = currentSlot == "a" ? "b" : "a";
@@ -1342,8 +1343,6 @@ public partial class FastbootUtil : IDisposable
             }
             else
             {
-                // AOSP: Before flashing logical partitions individually, resize them to 0
-                // to ensure optimal placement in the super partition.
                 foreach (var logImg in logicalImages)
                 {
                     string part = Path.GetFileNameWithoutExtension(logImg);
@@ -1352,7 +1351,6 @@ public partial class FastbootUtil : IDisposable
                         NotifyCurrentStep($"Preparing logical partition {part}...");
                         try
                         {
-                            // To align with AOSP behavior, we ensure the partition exists and is cleared
                             CreateLogicalPartition(part, 0);
                         }
                         catch { /* Ignore if already exists or not supported */ }

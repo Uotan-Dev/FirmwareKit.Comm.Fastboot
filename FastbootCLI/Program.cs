@@ -51,7 +51,7 @@ namespace FastbootCLI
                 {
                     // This is a command (like 'devices', 'flash', 'getvar')
                     string command = arg;
-                    
+
                     // Collect arguments for this specific command until next arg starting with '-'
                     List<string> commandArgs = new List<string>();
                     while (i < args.Length && !args[i].StartsWith("-"))
@@ -68,11 +68,35 @@ namespace FastbootCLI
                 return;
             }
 
+            if (pendingCommands.Count == 1 && pendingCommands[0].Command == "devices")
+            {
+                ExecuteDeviceList(pendingCommands[0].Args);
+                return;
+            }
+
+            var devices = UsbManager.GetAllDevices();
+            UsbDevice? target = serial != null ? devices.FirstOrDefault(d => d.SerialNumber == serial) : (devices.Count > 0 ? devices[0] : null);
+
+            if (target == null)
+            {
+                Console.Error.WriteLine("fastboot: error: no devices/found");
+                Environment.Exit(1);
+            }
+
+            using FastbootUtil util = new FastbootUtil(target);
+            if (sparseLimit.HasValue) FastbootUtil.SparseMaxDownloadSize = (int)Math.Min(int.MaxValue, sparseLimit.Value);
+
+            util.ReceivedFromDevice += (s, e) =>
+            {
+                if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
+            };
+
             foreach (var cmd in pendingCommands)
             {
                 try
                 {
-                    ExecuteCommand(cmd.Command, cmd.Args);
+                    util.ResetTransport();
+                    ExecuteCommand(util, cmd.Command, cmd.Args);
                 }
                 catch (Exception ex)
                 {
@@ -80,6 +104,16 @@ namespace FastbootCLI
                     Console.Error.WriteLine("fastboot: error: " + ex.Message);
                     Environment.Exit(1);
                 }
+            }
+        }
+
+        static void ExecuteDeviceList(List<string> args)
+        {
+            bool verbose = args.Contains("-l");
+            foreach (var dev in UsbManager.GetAllDevices())
+            {
+                if (verbose) Console.WriteLine($"{dev.SerialNumber}\tfastboot {dev.GetType().Name}");
+                else Console.WriteLine($"{dev.SerialNumber}\tfastboot");
             }
         }
 
@@ -93,31 +127,14 @@ namespace FastbootCLI
             return long.Parse(sizeStr) * multiplier;
         }
 
-        static void ExecuteCommand(string command, List<string> args)
+        static void ExecuteCommand(FastbootUtil util, string command, List<string> args)
         {
             if (command == "devices")
             {
-                bool verbose = args.Contains("-l");
-                foreach (var dev in UsbManager.GetAllDevices())
-                {
-                    if (verbose) Console.WriteLine($"{dev.SerialNumber}\tfastboot {dev.GetType().Name}");
-                    else Console.WriteLine($"{dev.SerialNumber}\tfastboot");
-                }
+                ExecuteDeviceList(args);
                 return;
             }
 
-            var devices = UsbManager.GetAllDevices();
-            UsbDevice? target = serial != null ? devices.FirstOrDefault(d => d.SerialNumber == serial) : (devices.Count > 0 ? devices[0] : null);
-
-            if (target == null) throw new Exception("no devices/found");
-
-            using FastbootUtil util = new FastbootUtil(target);
-            if (sparseLimit.HasValue) FastbootUtil.SparseMaxDownloadSize = (int)Math.Min(int.MaxValue, sparseLimit.Value);
-
-            util.ReceivedFromDevice += (s, e) =>
-            {
-                if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
-            };
             util.DataTransferProgressChanged += (s, e) =>
             {
                 int percent = (int)(e.Item1 * 100 / e.Item2);
@@ -134,12 +151,10 @@ namespace FastbootCLI
                 util.FormatPartition("cache");
             }
 
-            // Process partition name with slot suffix (Aligned with AOSP dynamic detection)
             string GetPartition(string baseName)
             {
                 if (string.IsNullOrEmpty(slot) || slot == "all")
                 {
-                    // If A/B device and no slot specified, auto-detect current slot
                     if (util.HasSlot(baseName))
                     {
                         string current = util.GetCurrentSlot();
@@ -147,7 +162,7 @@ namespace FastbootCLI
                     }
                     return baseName;
                 }
-                
+
                 if (slot == "other")
                 {
                     string current = util.GetCurrentSlot();
@@ -155,9 +170,7 @@ namespace FastbootCLI
                     return baseName + "_" + other;
                 }
 
-                // Explicit slot provided (a/b)
                 if (util.HasSlot(baseName)) return baseName + "_" + slot;
-                
                 return baseName;
             }
 
@@ -167,7 +180,6 @@ namespace FastbootCLI
                 string? targetSlot = args.Count > 0 ? args[0] : slot;
                 if (string.IsNullOrEmpty(targetSlot))
                 {
-                    // AOSP: if no slot, toggle the current slot
                     string? current = util.GetVar("current-slot");
                     targetSlot = (current == "a") ? "b" : "a";
                 }
@@ -214,7 +226,6 @@ namespace FastbootCLI
                 case "flash":
                     bool disableVerity = args.Contains("--disable-verity");
                     bool disableVerification = args.Contains("--disable-verification");
-                    // Filter out flags from args
                     var flashArgs = args.Where(a => !a.StartsWith("--")).ToList();
                     if (flashArgs.Count < 1) throw new Exception("usage: fastboot flash <partition> [filename]");
                     string part = GetPartition(flashArgs[0]);
@@ -240,9 +251,9 @@ namespace FastbootCLI
                     {
                         if (force)
                         {
-                            // In a real AOSP fastboot, --force might bypass certain checks
-                            // Here we just acknowledge it to silence the warning
+                            util.OemCommand("snapshot-update cancel").ThrowIfError();
                         }
+
                         using var fs = File.OpenRead(file);
                         util.FlashUnsparseImage(part, fs, fs.Length).ThrowIfError();
                     }
@@ -282,10 +293,12 @@ namespace FastbootCLI
                     break;
 
                 case "set_active":
-                    // Handled before switch if invoked as 'fastboot set_active'
-                    // This block is for if someone passes 'set_active' but it wasn't caught
-                    string saSlot = args.Count > 0 ? args[0] : "";
-                    if (string.IsNullOrEmpty(saSlot)) throw new Exception("usage: fastboot set_active <slot>");
+                    string? saSlot = args.Count > 0 ? args[0] : slot;
+                    if (string.IsNullOrEmpty(saSlot))
+                    {
+                        string? current = util.GetVar("current-slot");
+                        saSlot = (current == "a") ? "b" : "a";
+                    }
                     util.SetActiveSlot(saSlot).ThrowIfError();
                     break;
 

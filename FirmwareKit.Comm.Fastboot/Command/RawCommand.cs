@@ -45,16 +45,10 @@ public partial class FastbootUtil
             {
                 Console.Error.WriteLine($"Snapshot                                           FAILED (remote: '{response.Response}')");
             }
-            else
+            else if (!command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Error.WriteLine($"FAILED (remote: '{response.Response}')");
             }
-        }
-        else if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(command, "getvar:all", StringComparison.OrdinalIgnoreCase))
-        {
-            string key = command.Substring("getvar:".Length);
-            Console.Error.WriteLine($"{key}: {response.Response}");
         }
         else if (command.StartsWith("devices"))
         {
@@ -62,13 +56,28 @@ public partial class FastbootUtil
         }
         else if (!string.IsNullOrEmpty(response.Response))
         {
-            Console.Error.WriteLine(response.Response);
+            if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(command, "getvar:all", StringComparison.OrdinalIgnoreCase))
+            {
+                string key = command.Substring("getvar:".Length);
+                bool alreadyPrinted = response.Info.Any(i => i.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase));
+                if (!alreadyPrinted)
+                {
+                    Console.Error.WriteLine($"{key}: {response.Response}");
+                }
+            }
+            else if (command.StartsWith("getvar:all", StringComparison.OrdinalIgnoreCase))
+            {
+                // Already printed via INFO
+            }
+            else
+            {
+                Console.Error.WriteLine(response.Response);
+            }
         }
 
         return response;
     }
-
-
 }
 
 

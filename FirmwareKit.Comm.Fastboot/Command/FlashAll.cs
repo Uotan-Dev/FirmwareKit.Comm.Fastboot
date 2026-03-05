@@ -33,8 +33,6 @@ public partial class FastbootUtil
     public void FlashFromDirectory(string directory, bool skipSecondary = false)
     {
         string androidProductOut = directory;
-
-        // 1. Check android-info.txt
         string infoPath = Path.Combine(androidProductOut, "android-info.txt");
         if (File.Exists(infoPath))
         {
@@ -45,15 +43,11 @@ public partial class FastbootUtil
                 throw new Exception("Incompatible device: " + error);
             }
         }
-
-        // 2. Flash dynamic partitions if super_empty.img exists
         string superEmpty = Path.Combine(androidProductOut, "super_empty.img");
         if (File.Exists(superEmpty))
         {
             FlashDynamicPartitions(androidProductOut, superEmpty);
         }
-
-        // 3. Flash other common partitions
         string[] standardImages = {
             "boot", "init_boot", "vendor_boot", "dtbo", "pvmfw",
             "vbmeta", "vbmeta_system", "vbmeta_vendor", "recovery",

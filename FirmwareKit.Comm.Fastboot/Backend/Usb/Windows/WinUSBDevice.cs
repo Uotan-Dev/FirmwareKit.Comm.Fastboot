@@ -44,11 +44,8 @@ public class WinUSBDevice : UsbDevice
             USBDeviceInterfaceDescriptor.bInterfaceSubClass != 0x42 ||
             USBDeviceInterfaceDescriptor.bInterfaceProtocol != 0x03)
         {
-            // Note: Some drivers might not report official fastboot class/subclass.
-            // If it is a known Google device (18d1:d00d), we might want to bypass this check.
             if (USBDeviceDescriptor.idVendor != 0x18d1 || USBDeviceDescriptor.idProduct != 0xd00d)
             {
-                // This is not a fastboot interface, skip it.
                 return -1;
             }
         }
@@ -87,13 +84,24 @@ public class WinUSBDevice : UsbDevice
         GetSerialNumber();
 
         byte bTrue = 1;
-        uint timeout = 5000;
+        byte bFalse = 0;
+        uint timeout = 60000; // Increased to 60s for large flash operations
+
+        // Policy configuration
         WinUsb_SetPipePolicy(WinUSBHandle, ReadBulkID, AUTO_CLEAR_STALL, 1, ref bTrue);
         WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, AUTO_CLEAR_STALL, 1, ref bTrue);
         WinUsb_SetPipePolicy(WinUSBHandle, ReadBulkID, PIPE_TRANSFER_TIMEOUT, 4, ref timeout);
         WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, PIPE_TRANSFER_TIMEOUT, 4, ref timeout);
-        // Enable SHORT_PACKET_TERMINATE (ZLP) for Fastboot compliance
+
+        // WinUSB RAW_IO can significantly improve stability for large transfers.
+        // It requires that the transfer size is a multiple of the packet size (typically 512).
+        WinUsb_SetPipePolicy(WinUSBHandle, ReadBulkID, RAW_IO, 1, ref bFalse);
+        WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, RAW_IO, 1, ref bFalse);
+
+        // Enable SHORT_PACKET_TERMINATE (ZLP) for Fastboot compliance.
+        // This makes WinUSB automatically send a Zero Length Packet if the transfer is a multiple of MaxPacketSize.
         WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, SHORT_PACKET_TERMINATE, 1, ref bTrue);
+
         return 0;
     }
 
@@ -103,8 +111,8 @@ public class WinUSBDevice : UsbDevice
     {
         if (WinUSBHandle != IntPtr.Zero)
         {
-            if (ReadBulkID != 0) WinUsb_ResetPipe(WinUSBHandle, ReadBulkID);
-            if (WriteBulkID != 0) WinUsb_ResetPipe(WinUSBHandle, WriteBulkID);
+            WinUsb_ResetPipe(WinUSBHandle, ReadBulkID);
+            WinUsb_ResetPipe(WinUSBHandle, WriteBulkID);
         }
     }
 
@@ -130,26 +138,69 @@ public class WinUSBDevice : UsbDevice
 
     public override byte[] Read(int length)
     {
+        if (WinUSBHandle == IntPtr.Zero) throw new Exception("Device handle is closed.");
+
         byte[] data = new byte[length];
-        uint bytesTransfered;
-        if (WinUsb_ReadPipe(WinUSBHandle, ReadBulkID, data, (uint)length, out bytesTransfered, IntPtr.Zero))
+        uint totalBytesRead = 0;
+
+        // AOSP style: Read in a loop until requested length is met or a short packet is received.
+        while (totalBytesRead < length)
         {
-            byte[] realData = new byte[bytesTransfered];
-            Array.Copy(data, realData, (int)bytesTransfered);
-            return realData;
+            uint toRead = (uint)Math.Min(length - totalBytesRead, 1024 * 1024);
+            uint bytesRead;
+
+            if (WinUsb_ReadPipe(WinUSBHandle, ReadBulkID, data, toRead, out bytesRead, IntPtr.Zero))
+            {
+                if (bytesRead == 0) break;
+                totalBytesRead += bytesRead;
+
+                // If we got a short packet (less than requested), it signifies end of transfer.
+                if (bytesRead < toRead) break;
+            }
+            else
+            {
+                int err = Marshal.GetLastWin32Error();
+                if (err == 121) break;
+                throw new Win32Exception(err);
+            }
         }
-        throw new Win32Exception(Marshal.GetLastWin32Error());
+
+        if (totalBytesRead == length) return data;
+
+        if (totalBytesRead == 0 && length > 0) return Array.Empty<byte>();
+
+        byte[] realData = new byte[totalBytesRead];
+        Array.Copy(data, realData, (int)totalBytesRead);
+        return realData;
     }
 
     public override long Write(byte[] data, int length)
     {
-        uint bytesWrite = 0;
-        if (WinUSBHandle == IntPtr.Zero)
-            throw new Exception("Device handle is closed.");
+        if (WinUSBHandle == IntPtr.Zero) throw new Exception("Device handle is closed.");
 
-        if (WinUsb_WritePipe(WinUSBHandle, WriteBulkID, data, (uint)length, out bytesWrite, IntPtr.Zero))
-            return (long)bytesWrite;
-        throw new Win32Exception(Marshal.GetLastWin32Error());
+        uint totalBytesWritten = 0;
+        uint toWrite = (uint)length;
+        uint bytesWritten;
+
+        if (WinUsb_WritePipe(WinUSBHandle, WriteBulkID, data, toWrite, out bytesWritten, IntPtr.Zero))
+        {
+            totalBytesWritten = bytesWritten;
+
+            // Critical Fix for ZLP (Zero Length Packet):
+            // Some bootloaders (like QCOM) wait specifically for a Zero Length Packet
+            // if the transfer size is a multiple of MaxPacketSize (512).
+            if (length > 0 && length % 512 == 0)
+            {
+                uint zlpWritten;
+                WinUsb_WritePipe(WinUSBHandle, WriteBulkID, Array.Empty<byte>(), 0, out zlpWritten, IntPtr.Zero);
+            }
+        }
+        else
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        return (long)totalBytesWritten;
     }
 
     public override void Dispose()

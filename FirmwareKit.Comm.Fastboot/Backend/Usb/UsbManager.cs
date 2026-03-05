@@ -36,7 +36,6 @@ public static class UsbManager
         {
             return MacOSUsbFinder.FindDevice();
         }
-        // Fallback to libusb
         try
         {
             return LibUsbFinder.FindDevice();

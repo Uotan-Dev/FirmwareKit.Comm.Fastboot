@@ -94,7 +94,6 @@ namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows
             {
                 byte[] buffer = new byte[256];
                 int returned;
-                // SharpFastboot: 使用 Legacy IOCTL 探测是否为 Bulk 驱动
                 if (Win32API.DeviceIoControl(hDevice, LegacyUsbDevice.IoGetSerialCode, null, 0, buffer, buffer.Length, out returned, IntPtr.Zero))
                 {
                     isLegacy = true;

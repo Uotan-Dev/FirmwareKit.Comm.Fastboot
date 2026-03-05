@@ -1,10 +1,8 @@
+using FirmwareKit.Comm.Fastboot.Backend.Network;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
-using Xunit;
-using FirmwareKit.Comm.Fastboot.Backend.Network;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -168,7 +166,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             using var transport = new UdpTransport("127.0.0.1", port);
             await Assert.ThrowsAsync<Exception>(async () => await Task.Run(() => transport.Write(Encoding.ASCII.GetBytes("foo"), 3)));
-            
+
             await serverTask;
         }
     }

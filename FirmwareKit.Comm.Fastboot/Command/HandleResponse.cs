@@ -1,4 +1,5 @@
 using FirmwareKit.Comm.Fastboot.DataModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Text;
 
@@ -25,6 +26,12 @@ public partial class FastbootUtil
             {
                 data = Transport.Read(FB_RESPONSE_SZ);
             }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 121)
+            {
+                response.Result = FastbootState.Timeout;
+                response.Response = "status read timeout (121)";
+                return response;
+            }
             catch (Exception e)
             {
                 response.Result = FastbootState.Fail;
@@ -32,18 +39,34 @@ public partial class FastbootUtil
                 return response;
             }
 
-            if (data.Length == 0) continue;
+            if (data.Length == 0)
+            {
+                if ((DateTime.Now - start).TotalSeconds > 2)
+                {
+                    response.Result = FastbootState.Timeout;
+                    response.Response = "status read timed out (no data)";
+                    return response;
+                }
+                continue;
+            }
 
             string devStatus = Encoding.UTF8.GetString(data);
             if (devStatus.Length < 4)
             {
-                response.Result = FastbootState.Fail;
-                response.Response = "status malformed";
-                return response;
+                // Try reading again to see if we can get the rest, or treat as malformed
+                continue;
             }
 
+            // Remove any potential leading/trailing junk that can happen if the buffer was recycled
+            // though with Array.Empty/New it shouldn't, but Fastboot is ASCII-based.
+            devStatus = devStatus.Trim('\0', '\r', '\n');
+            if (devStatus.Length < 4) continue;
             string prefix = devStatus.Substring(0, 4);
-            string content = devStatus.Trim().Substring(4);
+            string content = devStatus.Length > 4 ? devStatus.Substring(4) : "";
+            if (FastbootDebug.IsEnabled && devStatus != prefix + content)
+            {
+                FastbootDebug.Log($"Raw response bytes: {BitConverter.ToString(data)}");
+            }
 
             if (prefix == "OKAY")
             {
@@ -55,14 +78,13 @@ public partial class FastbootUtil
             {
                 response.Result = FastbootState.Fail;
                 response.Response = content;
-                // AOSP: FAIL is a terminal state
                 return response;
             }
             else if (prefix == "INFO")
             {
                 response.Info.Add(content);
                 NotifyReceived(FastbootState.Info, content);
-                start = DateTime.Now; // Reset timeout for progress
+                start = DateTime.Now;
             }
             else if (prefix == "TEXT")
             {
@@ -72,10 +94,11 @@ public partial class FastbootUtil
             }
             else if (prefix == "DATA")
             {
-                if (!long.TryParse(content, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long dsize))
+                string dataHex = content.Trim();
+                if (!long.TryParse(dataHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long dsize))
                 {
                     response.Result = FastbootState.Fail;
-                    response.Response = "data size malformed: " + content;
+                    response.Response = "data size malformed: " + dataHex;
                     return response;
                 }
 

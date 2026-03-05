@@ -13,10 +13,21 @@ public partial class FastbootUtil
         if (response.Result != FastbootState.Data)
             return response;
 
-        long written = Transport.Write(data, data.Length);
-        if (written != data.Length)
+        long bytesWritten = 0;
+        int length = data.Length;
+
+        while (bytesWritten < length)
         {
-            return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{data.Length}" };
+            int toWrite = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
+            byte[] chunk = new byte[toWrite];
+            Array.Copy(data, bytesWritten, chunk, 0, toWrite);
+
+            long written = Transport.Write(chunk, toWrite);
+            if (written != toWrite)
+            {
+                return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{toWrite}" };
+            }
+            bytesWritten += written;
         }
 
         return HandleResponse();

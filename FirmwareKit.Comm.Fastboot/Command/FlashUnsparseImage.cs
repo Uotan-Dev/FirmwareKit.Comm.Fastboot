@@ -14,7 +14,6 @@ public partial class FastbootUtil
         if (length > maxDownloadSize)
         {
             NotifyCurrentStep($"{partition} is too large for a single download, splitting into sparse chunks...");
-            // Use SparseFile to split raw image into manageable sparse chunks
             using var sfile = SparseFile.FromStream(stream);
             return FlashSparseFile(partition, sfile, maxDownloadSize);
         }
