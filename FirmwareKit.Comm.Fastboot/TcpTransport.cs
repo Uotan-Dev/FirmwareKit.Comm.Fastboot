@@ -4,18 +4,25 @@ using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public class TcpTransport(string host, int port = 5554) : IFastbootTransport
+public class TcpTransport : IFastbootTransport
 {
-    private TcpClient _client = new();
-    private NetworkStream _stream;
+    private readonly TcpClient _client = new();
+    private NetworkStream? _stream;
     private long _messageBytesLeft = 0;
 
-    public string Host { get; } = host;
-    public int Port { get; } = port;
+    public string Host { get; }
+    public int Port { get; }
+
+    public TcpTransport(string host, int port = 5554)
+    {
+        Host = host;
+        Port = port;
+        InitializeProtocol();
+    }
 
     private void InitializeProtocol()
     {
-        _client.Connect(host, port);
+        _client.Connect(Host, Port);
         _stream = _client.GetStream();
         byte[] handshake = Encoding.ASCII.GetBytes("FB01");
         _stream.Write(handshake, 0, handshake.Length);
@@ -33,14 +40,16 @@ public class TcpTransport(string host, int port = 5554) : IFastbootTransport
             throw new Exception("Handshake failed: unrecognized initialization message.");
         }
 
-        if (!int.TryParse(responseText.Substring(2, 2), out int version) || version < 1)
+        string versionStr = responseText.Substring(2, 2);
+        if (!int.TryParse(versionStr, out int version) || version < 1)
         {
-            throw new Exception($"Handshake failed: unknown TCP protocol version {responseText.Substring(2, 2)} (host version 01).");
+            throw new Exception($"Handshake failed: unknown TCP protocol version {versionStr} (host version 01).");
         }
     }
 
     private int ReadFully(byte[] buffer, int offset, int length)
     {
+        if (_stream == null) throw new InvalidOperationException("Stream not initialized");
         int totalRead = 0;
         while (totalRead < length)
         {
@@ -76,6 +85,7 @@ public class TcpTransport(string host, int port = 5554) : IFastbootTransport
 
     public long Write(byte[] data, int length)
     {
+        if (_stream == null) throw new InvalidOperationException("Stream not initialized");
         byte[] header = new byte[8];
         BinaryPrimitives.WriteInt64BigEndian(header, length);
 

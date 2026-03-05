@@ -29,8 +29,8 @@ public class Win32API
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern bool DeviceIoControl(IntPtr device, uint code,
-                                              byte[] inBuffer, int inBufferSize,
-                                              byte[] outBuffer, int outBufferSize,
+                                              byte[]? inBuffer, int inBufferSize,
+                                              byte[]? outBuffer, int outBufferSize,
                                               out int bytesReturned, IntPtr overlapped);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]

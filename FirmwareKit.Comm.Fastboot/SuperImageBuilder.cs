@@ -39,7 +39,7 @@ public class SuperImageBuilder
 
         if (!string.IsNullOrEmpty(imagePath))
         {
-            _partitionImages[name] = imagePath;
+            _partitionImages[name] = imagePath!;
         }
     }
 

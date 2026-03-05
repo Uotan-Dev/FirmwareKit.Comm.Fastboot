@@ -18,7 +18,7 @@ public class SuperFlashHelper(FastbootUtil fastboot, string mainPartition = "sup
             try
             {
                 var metadataReader = new MetadataReader();
-                var metadata = metadataReader.ReadFromImageFile(emptyImagePath);
+                var metadata = metadataReader.ReadFromImageFile(emptyImagePath!);
                 var builder = MetadataBuilder.FromMetadata(metadata);
                 return new SuperImageBuilder(builder);
             }
