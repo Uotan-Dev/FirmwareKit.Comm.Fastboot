@@ -21,7 +21,8 @@ namespace FastbootCLI
             if (args.Length == 0) { ShowHelp(); return; }
 
             int i = 0;
-            List<string> commandArgs = new List<string>();
+            List<(string Command, List<string> Args)> pendingCommands = new List<(string, List<string>)>();
+
             while (i < args.Length)
             {
                 string arg = args[i++];
@@ -43,23 +44,43 @@ namespace FastbootCLI
                     sparseLimit = ParseSize(sizeStr);
                 }
                 else if (arg == "--debug") FastbootDebug.IsEnabled = true;
+                else if (arg == "--libusb") UsbManager.ForceLibUsb = true;
                 else if (arg == "--version" || arg == "version") { Console.WriteLine("fastboot version 1.2.5"); return; }
                 else if (arg == "-h" || arg == "--help" || arg == "help") { ShowHelp(); return; }
                 else if (!arg.StartsWith("-"))
                 {
+                    // This is a command (like 'devices', 'flash', 'getvar')
                     string command = arg;
-                    commandArgs = args.Skip(i).ToList();
-                    try { ExecuteCommand(command, commandArgs); }
-                    catch (Exception ex)
+                    
+                    // Collect arguments for this specific command until next arg starting with '-'
+                    List<string> commandArgs = new List<string>();
+                    while (i < args.Length && !args[i].StartsWith("-"))
                     {
-                        if (FastbootDebug.IsEnabled) Console.Error.WriteLine("[DEBUG] Exception: " + ex);
-                        Console.Error.WriteLine("fastboot: error: " + ex.Message);
-                        Environment.Exit(1);
+                        commandArgs.Add(args[i++]);
                     }
-                    return;
+                    pendingCommands.Add((command, commandArgs));
                 }
             }
-            ShowHelp();
+
+            if (pendingCommands.Count == 0)
+            {
+                ShowHelp();
+                return;
+            }
+
+            foreach (var cmd in pendingCommands)
+            {
+                try
+                {
+                    ExecuteCommand(cmd.Command, cmd.Args);
+                }
+                catch (Exception ex)
+                {
+                    if (FastbootDebug.IsEnabled) Console.Error.WriteLine("[DEBUG] Exception: " + ex);
+                    Console.Error.WriteLine("fastboot: error: " + ex.Message);
+                    Environment.Exit(1);
+                }
+            }
         }
 
         static long ParseSize(string sizeStr)
