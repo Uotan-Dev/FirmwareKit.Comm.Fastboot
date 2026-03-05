@@ -124,7 +124,7 @@ public partial class FastbootUtil : IDisposable
     public FastbootUtil(IFastbootTransport transport) => Transport = transport;
     public static int ReadTimeoutSeconds = 30;
     public static int OnceSendDataSize = 1024 * 1024;
-    public static int SparseMaxDownloadSize = 256 * 1024 * 1024;
+    public static int SparseMaxDownloadSize = 1024 * 1024 * 1024; // 1GB default limit to match AOSP RESPARSE_LIMIT
 
     private static readonly string[] PartitionPriority = {
     "preloader", "bootloader", "radio", "dram", "md1img", "xbl", "abl", "keystore",

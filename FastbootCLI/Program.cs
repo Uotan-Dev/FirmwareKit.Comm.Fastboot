@@ -1,6 +1,5 @@
 using FirmwareKit.Comm.Fastboot;
 using FirmwareKit.Comm.Fastboot.Usb;
-using FirmwareKit.Comm.Fastboot.Usb.Windows;
 
 namespace FastbootCLI
 {
@@ -8,6 +7,11 @@ namespace FastbootCLI
     {
         private static string? serial = null;
         private static string? slot = null;
+        private static bool wipeUserdata = false;
+        private static bool skipReboot = false;
+        private static bool force = false;
+        private static string? fsOptions = null;
+        private static long? sparseLimit = null;
 
         static void Main(string[] args)
         {
@@ -22,8 +26,23 @@ namespace FastbootCLI
                 string arg = args[i++];
                 if (arg == "-s" && i < args.Length) serial = args[i++];
                 else if (arg == "--slot" && i < args.Length) slot = args[i++];
+                else if (arg == "-a" || arg == "--set-active")
+                {
+                    // If next arg doesn't start with '-', it's the slot name
+                    if (i < args.Length && !args[i].StartsWith("-")) slot = args[i++];
+                    // Note: if no slot provided, AOSP logic handles active toggle in ExecuteCommand
+                }
+                else if (arg == "-w") wipeUserdata = true;
+                else if (arg == "--skip-reboot") skipReboot = true;
+                else if (arg == "--force") force = true;
+                else if (arg == "--fs-options" && i < args.Length) fsOptions = args[i++];
+                else if (arg == "-S" && i < args.Length)
+                {
+                    string sizeStr = args[i++];
+                    sparseLimit = ParseSize(sizeStr);
+                }
                 else if (arg == "--debug") FastbootDebug.IsEnabled = true;
-                else if (arg == "--version" || arg == "version") { Console.WriteLine("fastboot version 1.1.0"); return; }
+                else if (arg == "--version" || arg == "version") { Console.WriteLine("fastboot version 1.2.5"); return; }
                 else if (arg == "-h" || arg == "--help" || arg == "help") { ShowHelp(); return; }
                 else if (!arg.StartsWith("-"))
                 {
@@ -40,6 +59,16 @@ namespace FastbootCLI
                 }
             }
             ShowHelp();
+        }
+
+        static long ParseSize(string sizeStr)
+        {
+            long multiplier = 1;
+            char last = char.ToLower(sizeStr[^1]);
+            if (last == 'k') { multiplier = 1024; sizeStr = sizeStr[..^1]; }
+            else if (last == 'm') { multiplier = 1024 * 1024; sizeStr = sizeStr[..^1]; }
+            else if (last == 'g') { multiplier = 1024 * 1024 * 1024; sizeStr = sizeStr[..^1]; }
+            return long.Parse(sizeStr) * multiplier;
         }
 
         static void ExecuteCommand(string command, List<string> args)
@@ -61,6 +90,8 @@ namespace FastbootCLI
             if (target == null) throw new Exception("no devices/found");
 
             using FastbootUtil util = new FastbootUtil(target);
+            if (sparseLimit.HasValue) FastbootUtil.SparseMaxDownloadSize = (int)Math.Min(int.MaxValue, sparseLimit.Value);
+
             util.ReceivedFromDevice += (s, e) =>
             {
                 if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
@@ -68,19 +99,41 @@ namespace FastbootCLI
             util.DataTransferProgressChanged += (s, e) =>
             {
                 int percent = (int)(e.Item1 * 100 / e.Item2);
-                Console.Write($"\r{command} ({e.Item1}/{e.Item2}) {percent}%    ");
-                if (e.Item1 == e.Item2) Console.WriteLine();
+                Console.Error.Write($"\r{command} ({e.Item1}/{e.Item2}) {percent}%    ");
+                if (e.Item1 == e.Item2) Console.Error.WriteLine();
             };
 
-            // Process --slot if provided
-            string cmdSuffix = "";
-            if (!string.IsNullOrEmpty(slot))
+            if (wipeUserdata && (command == "flashall" || command == "update"))
             {
-                if (slot == "all" || slot == "other" || slot == "a" || slot == "b")
+                Console.Error.WriteLine("Wiping userdata/cache as requested by -w...");
+                util.ErasePartition("userdata");
+                util.FormatPartition("userdata");
+                util.ErasePartition("cache");
+                util.FormatPartition("cache");
+            }
+
+            // Process partition name with slot suffix
+            string GetPartition(string baseName)
+            {
+                if (string.IsNullOrEmpty(slot) || slot == "all" || slot == "other") return baseName;
+                // Specific common partitions that are always slotted in AOSP
+                string[] slotted = { "boot", "system", "vendor", "product", "system_ext", "odm", "vbmeta", "dtbo", "init_boot" };
+                if (slotted.Contains(baseName) || baseName.Contains("vbmeta"))
+                    return baseName + "_" + slot;
+                return baseName;
+            }
+
+            if (command == "set_active")
+            {
+                string targetSlot = args.Count > 0 ? args[0] : slot;
+                if (string.IsNullOrEmpty(targetSlot))
                 {
-                    // For specific commands, Google fastboot appends slot suffix
-                    // We handle it in individual cases if needed or via a global rule
+                    // AOSP: if no slot, toggle the current slot
+                    string current = util.GetVar("current-slot");
+                    targetSlot = (current == "a") ? "b" : "a";
                 }
+                util.SetActiveSlot(targetSlot).ThrowIfError();
+                return;
             }
 
             switch (command)
@@ -88,7 +141,7 @@ namespace FastbootCLI
                 case "getvar":
                     if (args.Count == 0) throw new Exception("getvar requires a variable name");
                     if (args[0] == "all") util.GetVarAll();
-                    else Console.WriteLine(args[0] + ": " + util.GetVar(args[0]));
+                    else Console.Error.WriteLine(args[0] + ": " + util.GetVar(args[0]));
                     break;
 
                 case "reboot":
@@ -96,26 +149,67 @@ namespace FastbootCLI
                     util.Reboot(targetStr).ThrowIfError();
                     break;
 
+                case "reboot-bootloader":
+                    util.Reboot("bootloader").ThrowIfError();
+                    break;
+
+                case "reboot-fastboot":
+                    util.Reboot("fastboot").ThrowIfError();
+                    break;
+
+                case "reboot-recovery":
+                    util.Reboot("recovery").ThrowIfError();
+                    break;
+
                 case "fetch":
-                    if (args.Count < 2) throw new Exception("usage: fastboot fetch <partition> <outfile>");
-                    util.Fetch(args[0], args[1]).ThrowIfError();
+                    if (args.Count < 2) throw new Exception("usage: fastboot fetch <partition> <outfile> [offset [size]]");
+                    string fetchPart = GetPartition(args[0]);
+                    long offset = args.Count > 2 ? ParseSize(args[2]) : 0;
+                    long fetchSize = args.Count > 3 ? ParseSize(args[3]) : 0;
+                    if (offset != 0 || fetchSize != 0)
+                        util.Fetch(fetchPart, args[1], offset, fetchSize).ThrowIfError();
+                    else
+                        util.Fetch(fetchPart, args[1]).ThrowIfError();
                     break;
 
                 case "flash":
-                    if (args.Count < 1) throw new Exception("usage: fastboot flash <partition> [filename]");
-                    string part = args[0];
-                    string? file = args.Count > 1 ? args[1] : null;
+                    bool disableVerity = args.Contains("--disable-verity");
+                    bool disableVerification = args.Contains("--disable-verification");
+                    // Filter out flags from args
+                    var flashArgs = args.Where(a => !a.StartsWith("--")).ToList();
+                    if (flashArgs.Count < 1) throw new Exception("usage: fastboot flash <partition> [filename]");
+                    string part = GetPartition(flashArgs[0]);
+                    string? file = flashArgs.Count > 1 ? flashArgs[1] : null;
+
                     if (file == null) throw new Exception("Automatic image discovery from $ANDROID_PRODUCT_OUT not implemented yet. Please specify filename.");
                     if (!File.Exists(file)) throw new Exception($"File not found: {file}");
-                    using (var fs = File.OpenRead(file))
+
+                    if (part.StartsWith("vbmeta") && (disableVerity || disableVerification))
+                        util.FlashVbmeta(part, file, disableVerity, disableVerification).ThrowIfError();
+                    else
                     {
+                        using var fs = File.OpenRead(file);
                         util.FlashUnsparseImage(part, fs, fs.Length).ThrowIfError();
                     }
+                    if (!skipReboot && (part.StartsWith("boot") || part.StartsWith("system"))) Console.Error.WriteLine("Note: Device may need a manual reboot or use 'fastboot reboot'.");
+                    break;
+
+                case "flashall":
+                    string? productOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
+                    if (string.IsNullOrEmpty(productOut)) throw new Exception("ANDROID_PRODUCT_OUT not set. Please use: fastboot update ZIP");
+                    new FastbootFlashAll(util).FlashFromDirectory(productOut);
+                    if (!skipReboot) util.Reboot("");
+                    break;
+
+                case "update":
+                    if (args.Count == 0) throw new Exception("usage: fastboot update <zip>");
+                    new FastbootFlashAll(util).FlashUpdateZip(args[0]);
+                    if (!skipReboot) util.Reboot("");
                     break;
 
                 case "flash:raw":
                     if (args.Count < 2) throw new Exception("usage: fastboot flash:raw <partition> <kernel> [ramdisk [second]]");
-                    string rawPart = args[0];
+                    string rawPart = GetPartition(args[0]);
                     string rawKernel = args[1];
                     string? rawRamdisk = args.Count > 2 ? args[2] : null;
                     string? rawSecond = args.Count > 3 ? args[3] : null;
@@ -124,17 +218,20 @@ namespace FastbootCLI
 
                 case "erase":
                     if (args.Count == 0) throw new Exception("usage: fastboot erase <partition>");
-                    util.ErasePartition(args[0]).ThrowIfError();
+                    util.ErasePartition(GetPartition(args[0])).ThrowIfError();
                     break;
 
                 case "format":
                     if (args.Count == 0) throw new Exception("usage: fastboot format <partition>");
-                    util.FormatPartition(args[0]).ThrowIfError();
+                    util.FormatPartition(GetPartition(args[0])).ThrowIfError();
                     break;
 
                 case "set_active":
-                    if (args.Count == 0) throw new Exception("usage: fastboot set_active <slot>");
-                    util.SetActiveSlot(args[0]).ThrowIfError();
+                    // Handled before switch if invoked as 'fastboot set_active'
+                    // This block is for if someone passes 'set_active' but it wasn't caught
+                    string saSlot = args.Count > 0 ? args[0] : "";
+                    if (string.IsNullOrEmpty(saSlot)) throw new Exception("usage: fastboot set_active <slot>");
+                    util.SetActiveSlot(saSlot).ThrowIfError();
                     break;
 
                 case "oem":
@@ -166,7 +263,10 @@ namespace FastbootCLI
 
                 case "snapshot-update":
                     string sub = args.Count > 0 ? args[0] : "cancel";
-                    util.SnapshotUpdate(sub).ThrowIfError();
+                    if (sub == "cancel" || sub == "merge")
+                        util.SnapshotUpdate(sub).ThrowIfError();
+                    else
+                        throw new Exception("usage: fastboot snapshot-update cancel|merge");
                     break;
 
                 case "continue":
@@ -208,55 +308,69 @@ namespace FastbootCLI
                     string kernel = args[0];
                     string? ramdisk = args.Count > 1 ? args[1] : null;
                     string? second = args.Count > 2 ? args[2] : null;
-                    util.BootFile(kernel, ramdisk, second).ThrowIfError();
+                    util.Boot(kernel, ramdisk, second).ThrowIfError();
                     break;
 
                 default:
-                    Console.WriteLine("Command not implemented: " + command);
+                    Console.Error.WriteLine("Command not implemented: " + command);
                     break;
             }
         }
 
         static void ShowHelp()
         {
-            Console.WriteLine("Usage: fastboot [-s <serial>] [--slot <slot>] [--debug] <command> [args]");
-            Console.WriteLine("\nbasics:");
-            Console.WriteLine("  devices [-l]                   List connected devices.");
-            Console.WriteLine("  getvar <name> | all            Display bootloader variable.");
-            Console.WriteLine("  reboot [bootloader|fastboot]   Reboot device.");
-            Console.WriteLine("  continue                       Continue with autoboot.");
+            Console.Error.WriteLine("Usage: fastboot [-s <serial>] [--slot <slot>] [-w] [-S <size>] [--skip-reboot] [--debug] <command> [args]");
+            Console.Error.WriteLine("\noptions:");
+            Console.Error.WriteLine("  -w                             Wipe userdata and cache after flashing.");
+            Console.Error.WriteLine("  -s <serial>                    Specify USB device serial.");
+            Console.Error.WriteLine("  --slot <slot>                  Specify active slot (a/b/all/other).");
+            Console.Error.WriteLine("  -a, --set-active[=<slot>]      Sets the active slot. If no slot is provided,");
+            Console.Error.WriteLine("                                 it will set the inactive slot to active.");
+            Console.Error.WriteLine("  -S <size>[k|m|g]               Break into sparse files no larger than SIZE.");
+            Console.Error.WriteLine("  --skip-reboot                  Don't reboot device after flashing all.");
+            Console.Error.WriteLine("  --force                        Force execute command (e.g. skip snapshot check).");
+            Console.Error.WriteLine("  --fs-options <opt>             File system options for format (e.g. casefold).");
 
-            Console.WriteLine("\nflashing:");
-            Console.WriteLine("  flash <partition> [filename]   Write file to partition.");
-            Console.WriteLine("  flash:raw <p> <k> [r [s]]      Create boot image and flash it.");
-            Console.WriteLine("  erase <partition>              Erase a flash partition.");
-            Console.WriteLine("  format <partition>             Format a flash partition.");
-            Console.WriteLine("  set_active <slot>              Set the active slot.");
+            Console.Error.WriteLine("\nbasics:");
+            Console.Error.WriteLine("  devices [-l]                   List connected devices.");
+            Console.Error.WriteLine("  getvar <name> | all            Display bootloader variable.");
+            Console.Error.WriteLine("  reboot [bootloader|fastboot|recovery] Reboot device.");
+            Console.Error.WriteLine("  continue                       Continue with autoboot.");
 
-            Console.WriteLine("\nlocking/unlocking:");
-            Console.WriteLine("  flashing lock|unlock           Lock/unlock partitions.");
-            Console.WriteLine("  flashing lock_critical|...     Lock/unlock critical partitions.");
-            Console.WriteLine("  flashing get_unlock_ability    Check if unlocking is allowed.");
+            Console.Error.WriteLine("\nflashing:");
+            Console.Error.WriteLine("  update <zip>                   Flash all partitions from a zip file.");
+            Console.Error.WriteLine("  flashall                       Flash all partitions from $ANDROID_PRODUCT_OUT.");
+            Console.Error.WriteLine("  flash <partition> [filename]   Write file to partition.");
+            Console.Error.WriteLine("  flash [--disable-verity] [--disable-verification] vbmeta [filename]");
+            Console.Error.WriteLine("  flash:raw <p> <k> [r [s]]      Create boot image and flash it.");
+            Console.Error.WriteLine("  erase <partition>              Erase a flash partition.");
+            Console.Error.WriteLine("  format <partition>             Format a flash partition.");
+            Console.Error.WriteLine("  set_active <slot>              Set the active slot.");
 
-            Console.WriteLine("\nadvanced:");
-            Console.WriteLine("  fetch <p> <outfile>            Fetch a partition from device.");
-            Console.WriteLine("  oem <command>                  Execute OEM-specific command.");
-            Console.WriteLine("  gsi wipe|disable|status        Manage GSI installation.");
-            Console.WriteLine("  wipe-super [super_empty]       Wipe the super partition.");
-            Console.WriteLine("  snapshot-update cancel|merge   Manage snapshot updates.");
+            Console.Error.WriteLine("\nlocking/unlocking:");
+            Console.Error.WriteLine("  flashing lock|unlock           Lock/unlock partitions.");
+            Console.Error.WriteLine("  flashing lock_critical|...     Lock/unlock critical partitions.");
+            Console.Error.WriteLine("  flashing get_unlock_ability    Check if unlocking is allowed.");
 
-            Console.WriteLine("\nlogical partitions:");
-            Console.WriteLine("  create-logical-partition <p> <s>");
-            Console.WriteLine("  delete-logical-partition <p>");
-            Console.WriteLine("  resize-logical-partition <p> <s>");
+            Console.Error.WriteLine("\nadvanced:");
+            Console.Error.WriteLine("  fetch <p> <outfile> [off [sz]] Fetch a partition from device.");
+            Console.Error.WriteLine("  oem <command>                  Execute OEM-specific command.");
+            Console.Error.WriteLine("  gsi wipe|disable|status        Manage GSI installation.");
+            Console.Error.WriteLine("  wipe-super [super_empty]       Wipe the super partition.");
+            Console.Error.WriteLine("  snapshot-update cancel|merge   Manage snapshot updates.");
 
-            Console.WriteLine("\nboot image:");
-            Console.WriteLine("  boot <kernel> [ramdisk [s]]     Download and boot kernel from RAM.");
+            Console.Error.WriteLine("\nlogical partitions:");
+            Console.Error.WriteLine("  create-logical-partition <p> <s>");
+            Console.Error.WriteLine("  delete-logical-partition <p>");
+            Console.Error.WriteLine("  resize-logical-partition <p> <s>");
 
-            Console.WriteLine("\nAndroid Things / Miscellaneous:");
-            Console.WriteLine("  stage <filename>               Send file to device for next command.");
-            Console.WriteLine("  get_staged <outfile>           Write data staged by last command to file.");
-            Console.WriteLine("  upload <name> <outfile>        Legacy upload (e.g. last_kmsg).");
+            Console.Error.WriteLine("\nboot image:");
+            Console.Error.WriteLine("  boot <kernel> [ramdisk [s]]     Download and boot kernel from RAM.");
+
+            Console.Error.WriteLine("\nAndroid Things / Miscellaneous:");
+            Console.Error.WriteLine("  stage <filename>               Send file to device for next command.");
+            Console.Error.WriteLine("  get_staged <outfile>           Write data staged by last command to file.");
+            Console.Error.WriteLine("  upload <name> <outfile>        Legacy upload (e.g. last_kmsg).");
         }
     }
 }

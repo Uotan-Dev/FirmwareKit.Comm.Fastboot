@@ -93,7 +93,8 @@ public class WinUSBDevice : UsbDevice
         WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, AUTO_CLEAR_STALL, 1, ref bTrue);
         WinUsb_SetPipePolicy(WinUSBHandle, ReadBulkID, PIPE_TRANSFER_TIMEOUT, 4, ref timeout);
         WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, PIPE_TRANSFER_TIMEOUT, 4, ref timeout);
-        WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, SHORT_PACKET_TERMINATE, 1, ref bFalse);
+        // Enable SHORT_PACKET_TERMINATE (ZLP) for Fastboot compliance
+        WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, SHORT_PACKET_TERMINATE, 1, ref bTrue);
         return 0;
     }
 
