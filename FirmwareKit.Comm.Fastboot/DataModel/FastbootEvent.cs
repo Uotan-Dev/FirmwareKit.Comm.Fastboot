@@ -1,4 +1,4 @@
-﻿namespace FirmwareKit.Comm.Fastboot.DataModel;
+namespace FirmwareKit.Comm.Fastboot.DataModel;
 
 public class FastbootReceivedFromDeviceEventArgs
 {
@@ -15,3 +15,4 @@ public class FastbootReceivedFromDeviceEventArgs
 
 
 }
+

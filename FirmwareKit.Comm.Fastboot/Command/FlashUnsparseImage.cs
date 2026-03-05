@@ -1,4 +1,4 @@
-﻿using FirmwareKit.Comm.Fastboot.DataModel;
+using FirmwareKit.Comm.Fastboot.DataModel;
 using FirmwareKit.Sparse.Core;
 
 namespace FirmwareKit.Comm.Fastboot;
@@ -27,3 +27,9 @@ public partial class FastbootUtil
 
 
 }
+
+
+
+
+
+

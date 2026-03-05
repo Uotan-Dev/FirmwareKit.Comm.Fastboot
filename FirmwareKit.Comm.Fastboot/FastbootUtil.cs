@@ -1,5 +1,7 @@
-﻿using FirmwareKit.Comm.Fastboot.DataModel;
-using FirmwareKit.Comm.Fastboot.Usb;
+using FirmwareKit.Comm.Fastboot.Backend.Network;
+using FirmwareKit.Comm.Fastboot.Backend.Usb;
+using FirmwareKit.Comm.Fastboot.DataModel;
+using FirmwareKit.Comm.Fastboot.Utils;
 using FirmwareKit.Lp;
 using FirmwareKit.Sparse.Core;
 using FirmwareKit.Sparse.Models;
@@ -143,9 +145,46 @@ public partial class FastbootUtil : IDisposable
     => ReceivedFromDevice?.Invoke(this, new FastbootReceivedFromDeviceEventArgs(state, info, text));
 
     /// <summary>
-    /// Waits for the device to connect (blocking call)
+    /// Checks if a partition has slots based on the "has-slot" variable from bootloader.
+    /// Results are cached to minimize round-trips.
     /// </summary>
-    /// <param name="deviceFinder">The method to find devices, such as GetAllDevices in FastbootCLI</param>
+    public bool HasSlot(string partition)
+    {
+        if (string.IsNullOrEmpty(partition)) return false;
+        if (_hasSlotCache.TryGetValue(partition, out bool has)) return has;
+
+        try
+        {
+            string val = GetVar("has-slot:" + partition);
+            has = (val == "yes");
+            _hasSlotCache[partition] = has;
+            return has;
+        }
+        catch
+        {
+            _hasSlotCache[partition] = false;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the current active slot (usually 'a' or 'b').
+    /// </summary>
+    public string GetCurrentSlot()
+    {
+        try
+        {
+            string slot = GetVar("current-slot");
+            if (slot.StartsWith("_")) slot = slot.Substring(1);
+            return slot;
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+
     /// <param name="serial">Optional: specify the serial number</param>
     /// <param name="timeoutSeconds">The timeout duration (seconds), -1 means wait forever</param>
     public static FastbootUtil? WaitForDevice(Func<List<UsbDevice>> deviceFinder, string? serial = null, int timeoutSeconds = -1)
@@ -393,33 +432,12 @@ public partial class FastbootUtil : IDisposable
         return SparseMaxDownloadSize;
     }
 
-    public string GetCurrentSlot() => GetVar("current-slot");
-
     /// <summary>
     /// Whether CRC is supported (AOSP sparse protocol extension)
     /// </summary>
     public bool HasCrc()
     {
         try { return GetVar("has-crc") == "yes"; } catch { return false; }
-    }
-
-    /// <summary>
-    /// Determines if the partition supports slots (with caching)
-    /// </summary>
-    public bool HasSlot(string partition)
-    {
-        if (_hasSlotCache.TryGetValue(partition, out bool cached)) return cached;
-        try
-        {
-            string res = GetVar("has-slot:" + partition);
-            bool has = res == "yes" || res == "1";
-            _hasSlotCache[partition] = has;
-            return has;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     /// <summary>
@@ -1387,6 +1405,8 @@ public partial class FastbootUtil : IDisposable
         }
     }
 }
+
+
 
 
 

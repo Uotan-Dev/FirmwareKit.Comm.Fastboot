@@ -1,4 +1,4 @@
-﻿using FirmwareKit.Comm.Fastboot.DataModel;
+using FirmwareKit.Comm.Fastboot.DataModel;
 using System.Globalization;
 using System.Text;
 
@@ -103,3 +103,9 @@ public partial class FastbootUtil
 
 
 }
+
+
+
+
+
+

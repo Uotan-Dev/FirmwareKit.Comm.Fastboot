@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+using FirmwareKit.Comm.Fastboot.Utils;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.DataModel;
@@ -95,7 +96,8 @@ public struct BootImageHeaderV1
             Name = new byte[16],
             Cmdline = new byte[512],
             Id = new uint[8],
-            ExtraCmdline = new byte[1024]
+            ExtraCmdline = new byte[1024],
+            HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV1>()
         };
     }
 }
@@ -148,7 +150,8 @@ public struct BootImageHeaderV2
             Name = new byte[16],
             Cmdline = new byte[512],
             Id = new uint[8],
-            ExtraCmdline = new byte[1024]
+            ExtraCmdline = new byte[1024],
+            HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV2>()
         };
     }
 }
@@ -708,3 +711,4 @@ public class BootImage
 
 
 }
+

@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+using FirmwareKit.Comm.Fastboot.Utils;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.DataModel;
@@ -86,3 +87,4 @@ public static class VbmetaFlags
 
 
 }
+

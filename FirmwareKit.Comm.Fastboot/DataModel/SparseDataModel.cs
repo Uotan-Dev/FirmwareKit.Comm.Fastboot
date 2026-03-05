@@ -1,4 +1,4 @@
-﻿namespace FirmwareKit.Comm.Fastboot.DataModel;
+namespace FirmwareKit.Comm.Fastboot.DataModel;
 
 public struct Ext4FileHeader
 {
@@ -22,3 +22,4 @@ public struct Ext4ChunkHeader
 
 
 }
+

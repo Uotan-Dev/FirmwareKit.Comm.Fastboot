@@ -1,4 +1,4 @@
-﻿namespace FirmwareKit.Comm.Fastboot.DataModel;
+namespace FirmwareKit.Comm.Fastboot.DataModel;
 
 public class FastbootResponse
 {
@@ -12,8 +12,8 @@ public class FastbootResponse
 
     public FastbootResponse ThrowIfError()
     {
-        if (Result == FastbootState.Fail)
-            throw new Exception("Command failed");
+        if (Result == FastbootState.Fail || Result == FastbootState.Timeout)
+            throw new Exception($"Command failed: {Result} - {Response}");
         return this;
     }
 }
@@ -30,3 +30,4 @@ public enum FastbootState
 
 
 }
+
