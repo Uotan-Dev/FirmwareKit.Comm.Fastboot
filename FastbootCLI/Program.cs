@@ -180,7 +180,7 @@ namespace FastbootCLI
                 case "getvar":
                     if (args.Count == 0) throw new Exception("getvar requires a variable name");
                     if (args[0] == "all") util.GetVarAll();
-                    else Console.Error.WriteLine(args[0] + ": " + util.GetVar(args[0]));
+                    else util.GetVar(args[0]);
                     break;
 
                 case "reboot":
