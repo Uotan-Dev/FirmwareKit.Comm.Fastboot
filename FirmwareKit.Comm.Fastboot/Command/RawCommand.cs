@@ -10,10 +10,13 @@ public partial class FastbootUtil
     /// </summary>
     public FastbootResponse RawCommand(string command)
     {
+        FastbootDebug.Log("Sending command: " + command);
         byte[] cmdBytes = Encoding.UTF8.GetBytes(command);
         try
         {
-            if (Transport.Write(cmdBytes, cmdBytes.Length) != cmdBytes.Length)
+            int bytesWritten = (int)Transport.Write(cmdBytes, cmdBytes.Length);
+            FastbootDebug.Log($"Bytes written: {bytesWritten}/{cmdBytes.Length}");
+            if (bytesWritten != cmdBytes.Length)
             {
                 return new FastbootResponse
                 {
@@ -24,6 +27,7 @@ public partial class FastbootUtil
         }
         catch (Exception e)
         {
+            FastbootDebug.Log("Exception during command write: " + e);
             return new FastbootResponse
             {
                 Result = FastbootState.Fail,
@@ -31,7 +35,9 @@ public partial class FastbootUtil
             };
         }
 
+        FastbootDebug.Log("Waiting for response...");
         var response = HandleResponse();
+        FastbootDebug.Log("Response received: " + response.Response);
 
         if (response.Result == FastbootState.Fail)
         {

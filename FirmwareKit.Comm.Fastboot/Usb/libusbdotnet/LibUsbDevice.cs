@@ -268,16 +268,23 @@ public class LibUsbDevice : UsbDevice
 
     public override long Write(byte[] data, int length)
     {
-        if (writer == null) return -1;
+        if (writer == null)
+        {
+            FastbootDebug.Log("LibUsbDevice: writer is null");
+            return -1;
+        }
 
         const int maxLenToSend = 1048576;
         int lenRemaining = length;
         int count = 0;
 
+        FastbootDebug.Log($"LibUsbDevice: Write attempt - length: {length}, data: {BitConverter.ToString(data, 0, Math.Min(length, 16))}");
+
         if (length == 0)
         {
             int transferred;
-            writer.Write(data, 0, 0, 5000, out transferred);
+            var errorCode = writer.Write(data, 0, 0, 5000, out transferred);
+            FastbootDebug.Log($"LibUsbDevice: Zero-length write - transferred: {transferred}, errorCode: {errorCode}");
             return transferred;
         }
 
@@ -285,18 +292,30 @@ public class LibUsbDevice : UsbDevice
         {
             int lenToSend = Math.Min(lenRemaining, maxLenToSend);
             int transferred;
-            writer.Write(data, count, lenToSend, 5000, out transferred);
+            var errorCode = writer.Write(data, count, lenToSend, 5000, out transferred);
 
-            if (transferred <= 0) break;
+            if (errorCode != 0) // UsbError.Success is 0
+            {
+                FastbootDebug.Log($"LibUsbDevice: Write error! errorCode: {errorCode}, transferred: {transferred}");
+            }
+
+            if (transferred <= 0)
+            {
+                FastbootDebug.Log($"LibUsbDevice: Write returned non-positive transferred: {transferred}, errorCode: {errorCode}");
+                break;
+            }
 
             count += transferred;
             lenRemaining -= transferred;
 
-            if (transferred < lenToSend) break;
+            if (transferred < lenToSend)
+            {
+                FastbootDebug.Log($"LibUsbDevice: Short write - transferred {transferred} < requested {lenToSend}");
+                break;
+            }
         }
 
+        FastbootDebug.Log($"LibUsbDevice: Write finished - total count: {count}");
         return count > 0 ? count : (length == 0 ? 0 : -1);
     }
-
-
 }

@@ -47,11 +47,11 @@ public class WinUSBAPI
 
     [DllImport("Winusb.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern bool WinUsb_WritePipe(IntPtr DeviceHandle, byte pipeID, byte[] buffer,
-        ulong bufferLen, out ulong bytesTransfered, IntPtr overlapp);
+        uint bufferLen, out uint bytesTransfered, IntPtr overlapp);
 
     [DllImport("Winusb.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern bool WinUsb_ReadPipe(IntPtr DeviceHandle, byte pipeID, byte[] buffer,
-        ulong bufferLen, out ulong bytesTransfered, IntPtr overlapp);
+        uint bufferLen, out uint bytesTransfered, IntPtr overlapp);
 
     [DllImport("Winusb.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern bool WinUsb_ResetPipe(IntPtr InterfaceHandle, byte PipeID);

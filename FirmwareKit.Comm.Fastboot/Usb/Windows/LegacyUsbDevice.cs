@@ -1,97 +1,94 @@
-using System.ComponentModel;
+using System;
 using System.Runtime.InteropServices;
-using System.Text;
+using System.ComponentModel;
 using static FirmwareKit.Comm.Fastboot.Usb.Windows.Win32API;
 
-namespace FirmwareKit.Comm.Fastboot.Usb.Windows;
-
-public class LegacyUsbDevice : UsbDevice
+namespace FirmwareKit.Comm.Fastboot.Usb.Windows
 {
-    public static readonly uint IoGetSerialCode = ((FILE_DEVICE_UNKNOWN) << 16) | ((FILE_READ_ACCESS) << 14) | ((16) << 2) | (METHOD_BUFFERED);
-    public IntPtr DeviceHandle { get; private set; }
-
-    public IntPtr ReadBulkHandle { get; private set; }
-
-    public IntPtr WriteBulkHandle { get; private set; }
-
-    public override int CreateHandle()
+    public class LegacyUsbDevice : UsbDevice
     {
-        DeviceHandle = SimpleCreateHandle(DevicePath);
-        ReadBulkHandle = SimpleCreateHandle(DevicePath + "\\BulkRead");
-        WriteBulkHandle = SimpleCreateHandle(DevicePath + "\\BulkWrite");
-        if (DeviceHandle == new IntPtr(-1) ||
-            ReadBulkHandle == new IntPtr(-1) ||
-            WriteBulkHandle == new IntPtr(-1))
-            return Marshal.GetLastWin32Error();
-        GetSerialNumber();
-        return 0;
-    }
+        public static uint IoGetSerialCode => CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_READ_ACCESS);
+        public static uint IoGetDescriptorCode => CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_READ_ACCESS);
 
-    public override void Reset()
-    {
-        // Not supported in legacy driver
-    }
+        private IntPtr fileHandle = INVALID_HANDLE_VALUE;
 
-    public override int GetSerialNumber()
-    {
-        byte[] serial = new byte[512];
-        int bytes_get;
-        if (DeviceIoControl(DeviceHandle, IoGetSerialCode, Array.Empty<byte>(), 0, serial, 512, out bytes_get, IntPtr.Zero))
+        public IntPtr Handle => fileHandle;
+
+        public override int CreateHandle()
         {
-            // The legacy driver returns the serial number as a null-terminated UTF-16 string
-            SerialNumber = Encoding.Unicode.GetString(serial, 0, bytes_get).TrimEnd('\0');
+            fileHandle = SimpleCreateHandle(DevicePath);
+            if (fileHandle == INVALID_HANDLE_VALUE)
+                return Marshal.GetLastWin32Error();
+
+            // 仿照谷歌原生逻辑，检查是否匹配 Fastboot 接口标准 (0xff, 0x42, 0x03)
+            // 在 Legacy 驱动中，我们尝试探测其是否响应特定的 IOCTL 
+            if (!CheckInterface())
+            {
+                CloseHandle(fileHandle);
+                fileHandle = INVALID_HANDLE_VALUE;
+                return -1;
+            }
+
+            GetSerialNumber();
             return 0;
         }
-        return Marshal.GetLastWin32Error();
+
+        private bool CheckInterface()
+        {
+            byte[] buffer = new byte[256];
+            int returned;
+            // 能够响应 IoGetSerialCode，初步认为是兼容的 Legacy 驱动
+            return DeviceIoControl(fileHandle, IoGetSerialCode, null, 0, buffer, buffer.Length, out returned, IntPtr.Zero);
+        }
+
+        public override int GetSerialNumber()
+        {
+            byte[] buffer = new byte[256];
+            int returned;
+            if (DeviceIoControl(fileHandle, IoGetSerialCode, null, 0, buffer, buffer.Length, out returned, IntPtr.Zero))
+            {
+                SerialNumber = System.Text.Encoding.Unicode.GetString(buffer, 0, returned).TrimEnd('\0');
+                return 0;
+            }
+            return Marshal.GetLastWin32Error();
+        }
+
+        public override byte[] Read(int length)
+        {
+            byte[] buffer = new byte[length];
+            uint read;
+            if (ReadFile(fileHandle, buffer, (uint)length, out read, IntPtr.Zero))
+            {
+                byte[] result = new byte[read];
+                Array.Copy(buffer, result, (int)read);
+                return result;
+            }
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        public override long Write(byte[] data, int length)
+        {
+            uint written;
+            if (WriteFile(fileHandle, data, (uint)length, out written, IntPtr.Zero))
+            {
+                return written;
+            }
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        public override void Reset()
+        {
+            // Legacy 驱动通常不支持软重置
+        }
+
+        public override void Dispose()
+        {
+            if (fileHandle != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(fileHandle);
+                fileHandle = INVALID_HANDLE_VALUE;
+            }
+            GC.SuppressFinalize(this);
+        }
     }
-
-    public override byte[] Read(int length)
-    {
-        uint bytesRead;
-        byte[] data = new byte[length];
-        if (ReadBulkHandle == IntPtr.Zero)
-            throw new Exception("Read handle is closed.");
-
-        if (ReadFile(ReadBulkHandle, data, (uint)length, out bytesRead, IntPtr.Zero))
-        {
-            byte[] res = new byte[bytesRead];
-            Array.Copy(data, res, bytesRead);
-            return res;
-        }
-        throw new Win32Exception(Marshal.GetLastWin32Error());
-    }
-
-    public override long Write(byte[] data, int length)
-    {
-        ulong bytesWrite = 0;
-        if (WriteBulkHandle == IntPtr.Zero)
-            throw new Exception("Write handle is closed.");
-
-        if (WriteFile(WriteBulkHandle, data, (uint)length, out bytesWrite, IntPtr.Zero))
-        {
-            return (long)bytesWrite;
-        }
-        throw new Win32Exception(Marshal.GetLastWin32Error());
-    }
-
-    public override void Dispose()
-    {
-        if (DeviceHandle != IntPtr.Zero && DeviceHandle != new IntPtr(-1))
-        {
-            CloseHandle(DeviceHandle);
-            DeviceHandle = IntPtr.Zero;
-        }
-        if (ReadBulkHandle != IntPtr.Zero && ReadBulkHandle != new IntPtr(-1))
-        {
-            CloseHandle(ReadBulkHandle);
-            ReadBulkHandle = IntPtr.Zero;
-        }
-        if (WriteBulkHandle != IntPtr.Zero && WriteBulkHandle != new IntPtr(-1))
-        {
-            CloseHandle(WriteBulkHandle);
-            WriteBulkHandle = IntPtr.Zero;
-        }
-    }
-
-
 }

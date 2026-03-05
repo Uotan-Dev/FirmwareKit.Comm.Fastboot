@@ -13,9 +13,13 @@
     <PackageProjectUrl>https://github.com/uotan-Dev/SharpFastboot</PackageProjectUrl>
     <RepositoryUrl>https://github.com/uotan-Dev/SharpFastboot</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	<RepositoryType>git</RepositoryType>
+	<PublishRepositoryUrl>true</PublishRepositoryUrl>
+	<IncludeSymbols>true</IncludeSymbols>
+	<SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>fastboot;android;firmware;flashing;usb;tcp;udp;adb</PackageTags>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <PackageId>FirmwareKit.Comm.Fastboot</PackageId>
     <Product>FastbootCli</Product>
   </PropertyGroup>

@@ -16,6 +16,11 @@ public class Win32API
     public static uint FILE_READ_ACCESS { get; } = 1;
     public static uint FILE_FLAG_OVERLAPPED { get; } = 0x40000000;
 
+    public static uint CTL_CODE(uint deviceType, uint function, uint method, uint access)
+    {
+        return (deviceType << 16) | (access << 14) | (function << 2) | method;
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string fileName, uint access,
                                          uint shareMode, IntPtr securityAttributes,
@@ -28,11 +33,11 @@ public class Win32API
                                               byte[] outBuffer, int outBufferSize,
                                               out int bytesReturned, IntPtr overlapped);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall)]
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern bool CloseHandle(IntPtr handle);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
-    public static extern bool WriteFile(IntPtr hFile, byte[] buffer, uint sizeToWrite, out ulong bytesWritten, IntPtr overlapped);
+    public static extern bool WriteFile(IntPtr hFile, byte[] buffer, uint sizeToWrite, out uint bytesWritten, IntPtr overlapped);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
     public static extern bool ReadFile(IntPtr hFile, byte[] buffer, uint sizeToRead, out uint bytesRead, IntPtr overlapped);

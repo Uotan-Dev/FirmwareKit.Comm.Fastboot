@@ -9,8 +9,13 @@ using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootUtil : IDisposable
 {
+    public void Dispose()
+    {
+        Transport?.Dispose();
+    }
+
     /// <summary>
     /// Determines whether the device is in fastbootd (userspace) mode.
     /// </summary>
@@ -178,24 +183,36 @@ public partial class FastbootUtil
     /// </summary>
     public Dictionary<string, string> GetVarAll()
     {
+        FastbootDebug.Log("Sending command: getvar:all");
         _varCache.Clear();
-        var res = RawCommand("getvar:all").ThrowIfError();
-        var dict = new Dictionary<string, string>();
-        foreach (var line in res.Info)
+        try
         {
-            int colonIdx = line.LastIndexOf(":");
-            if (colonIdx > 0)
+            var res = RawCommand("getvar:all").ThrowIfError();
+            FastbootDebug.Log("Command response received. Parsing...");
+            var dict = new Dictionary<string, string>();
+            foreach (var line in res.Info)
             {
-                string k = line.Substring(0, colonIdx).Trim();
-                string v = line.Substring(colonIdx + 1).TrimStart();
-                if (!dict.ContainsKey(k))
+                FastbootDebug.Log("Parsing line: " + line);
+                int colonIdx = line.LastIndexOf(":");
+                if (colonIdx > 0)
                 {
-                    dict[k] = v;
-                    _varCache[k] = v;
+                    string k = line.Substring(0, colonIdx).Trim();
+                    string v = line.Substring(colonIdx + 1).TrimStart();
+                    FastbootDebug.Log($"Parsed key: {k}, value: {v}");
+                    if (!dict.ContainsKey(k))
+                    {
+                        dict[k] = v;
+                        _varCache[k] = v;
+                    }
                 }
             }
+            return dict;
         }
-        return dict;
+        catch (Exception ex)
+        {
+            FastbootDebug.Log("Exception in GetVarAll: " + ex);
+            throw;
+        }
     }
 
     /// <summary>

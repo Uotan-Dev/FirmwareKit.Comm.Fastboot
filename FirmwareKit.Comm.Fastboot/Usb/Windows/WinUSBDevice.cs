@@ -44,8 +44,13 @@ public class WinUSBDevice : UsbDevice
             USBDeviceInterfaceDescriptor.bInterfaceSubClass != 0x42 ||
             USBDeviceInterfaceDescriptor.bInterfaceProtocol != 0x03)
         {
-            // This is not a fastboot interface, skip it.
-            return -1;
+            // Note: Some drivers might not report official fastboot class/subclass.
+            // If it is a known Google device (18d1:d00d), we might want to bypass this check.
+            if (USBDeviceDescriptor.idVendor != 0x18d1 || USBDeviceDescriptor.idProduct != 0xd00d)
+            {
+                // This is not a fastboot interface, skip it.
+                return -1;
+            }
         }
 
         for (byte endpoint = 0; endpoint < USBDeviceInterfaceDescriptor.bNumEndpoints; endpoint++)
@@ -92,6 +97,8 @@ public class WinUSBDevice : UsbDevice
         return 0;
     }
 
+    public IntPtr Handle => WinUSBHandle != IntPtr.Zero ? WinUSBHandle : FileHandle;
+
     public override void Reset()
     {
         if (WinUSBHandle != IntPtr.Zero)
@@ -124,8 +131,8 @@ public class WinUSBDevice : UsbDevice
     public override byte[] Read(int length)
     {
         byte[] data = new byte[length];
-        ulong bytesTransfered;
-        if (WinUsb_ReadPipe(WinUSBHandle, ReadBulkID, data, (ulong)length, out bytesTransfered, IntPtr.Zero))
+        uint bytesTransfered;
+        if (WinUsb_ReadPipe(WinUSBHandle, ReadBulkID, data, (uint)length, out bytesTransfered, IntPtr.Zero))
         {
             byte[] realData = new byte[bytesTransfered];
             Array.Copy(data, realData, (int)bytesTransfered);
@@ -136,7 +143,7 @@ public class WinUSBDevice : UsbDevice
 
     public override long Write(byte[] data, int length)
     {
-        ulong bytesWrite = 0;
+        uint bytesWrite = 0;
         if (WinUSBHandle == IntPtr.Zero)
             throw new Exception("Device handle is closed.");
 
