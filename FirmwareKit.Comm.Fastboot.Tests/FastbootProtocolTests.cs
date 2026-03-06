@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using FirmwareKit.Comm.Fastboot.Usb;
+using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -132,7 +134,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("OKAYDONE");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -145,7 +147,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("FAILERROR_MESSAGE");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -160,7 +162,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             mockUsb.EnqueueResponse("INFOPartial Info 1");
             mockUsb.EnqueueResponse("INFOPartial Info 2");
             mockUsb.EnqueueResponse("OKAY");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -175,7 +177,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("INFOline1\0INFOline2\0OKAYDONE");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -191,7 +193,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("TEXTpart1\0TEXTpart2\0OKAY");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -204,7 +206,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("DATA80000000"); // 2GB in hex
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -217,7 +219,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("DATA123456789"); // 9 hex chars should be rejected
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -230,7 +232,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("DATA00000G10");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -243,7 +245,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("DATAffffffff");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -257,7 +259,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             var mockUsb = new MockUsbDevice { DevicePath = "mock" };
             mockUsb.EnqueueResponse("DA");
             mockUsb.EnqueueResponse("TA00000010");
-            var util = new FastbootUtil(mockUsb);
+            var util = new FastbootDriver(mockUsb);
 
             var response = util.HandleResponse();
 
@@ -270,7 +272,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             var transport = new MockTransport();
             transport.EnqueueResponse("DATA00000010");
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             using var shortStream = new MemoryStream(new byte[4]);
             var response = util.DownloadData(shortStream, 16);
@@ -283,7 +285,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         public void DownloadDataBytes_ZeroLength_Fails()
         {
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             var response = util.DownloadData(Array.Empty<byte>());
 
@@ -297,7 +299,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             var transport = new MockTransport();
             transport.EnqueueResponse("DATA00000010");
             transport.EnqueueResponse("OKAY");
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             var response = util.DownloadData(new byte[16]);
 
@@ -313,7 +315,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             transport.EnqueueResponse("DATA00000008");
             transport.EnqueueWriteResult("download:00000008".Length);
             transport.EnqueueWriteResult(4);
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             var response = util.DownloadData(new byte[8]);
 
@@ -329,7 +331,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             transport.EnqueueResponse("abc");
             transport.EnqueueResponse("def");
             transport.EnqueueResponse("OKAYDONE");
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             using var output = new MemoryStream();
             var response = util.UploadData("upload", output);
@@ -348,7 +350,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             transport.EnqueueResponse("DATA00000006");
             transport.EnqueueResponse("abc");
             transport.EnqueueResponse("");
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             using var output = new MemoryStream();
             var ex = Assert.Throws<Exception>(() => util.UploadData("upload", output));
@@ -363,7 +365,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             transport.EnqueueResponse("DATA00000003");
             transport.EnqueueResponse("abc");
             transport.EnqueueResponse("FAILnope");
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             using var output = new MemoryStream();
             var response = util.UploadData("upload", output);
@@ -387,7 +389,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 ["flash:boot"] = "OKAY"
             });
 
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             using var stream = new MemoryStream(imageBytes);
             util.FlashImage("boot", stream);

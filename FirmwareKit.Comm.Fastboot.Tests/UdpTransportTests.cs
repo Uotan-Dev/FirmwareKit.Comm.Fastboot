@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using FirmwareKit.Comm.Fastboot.Network;
+using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

@@ -1,4 +1,5 @@
 using System.Text;
+using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -37,7 +38,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, Boot)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY");
 
@@ -52,7 +53,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, Continue)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY");
 
@@ -67,7 +68,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, Erase)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY");
 
@@ -82,7 +83,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, Flash)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY");
 
@@ -97,7 +98,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, GetVarAll)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("INFOversion:0.4");
             transport.EnqueueResponse("INFOslot-count:2");
@@ -115,7 +116,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, Reboot)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY");
 

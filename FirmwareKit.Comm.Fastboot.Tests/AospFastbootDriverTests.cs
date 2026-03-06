@@ -1,4 +1,5 @@
 using System.Text;
+using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -37,7 +38,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from: fastboot_driver_test.cpp -> TEST_F(DriverTest, GetVar)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY0.4");
 
@@ -52,7 +53,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from: fastboot_driver_test.cpp -> TEST_F(DriverTest, InfoMessage)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("INFOthis is an info line");
             transport.EnqueueResponse("OKAY");
@@ -70,7 +71,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Ported from: fastboot_driver_test.cpp -> TEST_F(DriverTest, TextMessage)
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
             string capturedText = "";
 
             util.ReceivedFromDevice += (s, e) =>
@@ -104,7 +105,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         {
             // Logical check: If download command fails, should return FAIL immediately
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("FAILdata too large");
 
@@ -118,7 +119,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         public void Test_ConsecutiveInfoInSinglePacket()
         {
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             // Single packet contains two INFO frames followed by OKAY
             transport.EnqueueResponse("INFOfirst lineINFOsecond lineOKAY");
@@ -135,7 +136,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         public void Test_InfoWithoutDelimiterFollowedByOkay()
         {
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             // INFO payload without newline then OKAY immediately in same packet
             transport.EnqueueResponse("INFOpartial infoOKAY");
@@ -151,7 +152,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         public void Test_MalformedDataLength()
         {
             var transport = new MockTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             // DATA followed by non-hex content should be treated as malformed
             transport.EnqueueResponse("DATAGARBAGE");

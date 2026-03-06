@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -89,7 +90,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact]
         public void CheckFastbootInfoRequirements_CorrectVersions_ReturnsTrue()
         {
-            var util = new FastbootUtil(new ScriptedTransport());
+            var util = new FastbootDriver(new ScriptedTransport());
             string[] correctVersions = { "1", "2" };
 
             foreach (string version in correctVersions)
@@ -101,7 +102,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact]
         public void CheckFastbootInfoRequirements_BadVersions_ReturnsFalse()
         {
-            var util = new FastbootUtil(new ScriptedTransport());
+            var util = new FastbootDriver(new ScriptedTransport());
             string[] badVersions = { "", ".01", "x1", "1.0.1", "1.", "1.0 2.0", "100.00", "3", "17", "22" };
 
             foreach (string version in badVersions)
@@ -113,7 +114,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact]
         public void FlashFromInfo_UnknownCommand_Throws()
         {
-            var util = new FastbootUtil(new ScriptedTransport());
+            var util = new FastbootDriver(new ScriptedTransport());
             string info = "version 1\nunknown-cmd";
 
             var ex = Assert.Throws<InvalidDataException>(() =>
@@ -129,7 +130,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             {
                 ["getvar:has-slot:userdata"] = "OKAYno"
             });
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             string info = "version 1\nif-wipe erase userdata";
             util.FlashFromInfo(info, Path.GetTempPath(), wipe: false, slotOverride: "a", optimizeSuper: false);
@@ -144,7 +145,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             {
                 ["getvar:has-slot:userdata"] = "OKAYno"
             });
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             string info = "version 1\nif-wipe erase userdata";
             util.FlashFromInfo(info, Path.GetTempPath(), wipe: true, slotOverride: "a", optimizeSuper: false);
@@ -169,7 +170,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                     ["getvar:max-download-size"] = "OKAY0x100000",
                     ["flash:system_b"] = "OKAY"
                 });
-                var util = new FastbootUtil(transport);
+                var util = new FastbootDriver(transport);
 
                 string info = "version 1\nflash --slot-other system system_other.img";
                 util.FlashFromInfo(info, tempDir, wipe: false, slotOverride: "a", optimizeSuper: false);
@@ -187,7 +188,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         public void FlashFromInfo_RebootCommands_MappedCorrectly()
         {
             var transport = new ProtocolScriptTransport();
-            var util = new FastbootUtil(transport);
+            var util = new FastbootDriver(transport);
 
             string info = "version 1\nreboot bootloader\nreboot";
             util.FlashFromInfo(info, Path.GetTempPath(), wipe: false, slotOverride: "a", optimizeSuper: false);
@@ -199,23 +200,23 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact]
         public void GetMaxDownloadSize_ClampsToSparseLimit()
         {
-            int originalLimit = FastbootUtil.SparseMaxDownloadSize;
+            int originalLimit = FastbootDriver.SparseMaxDownloadSize;
             try
             {
-                FastbootUtil.SparseMaxDownloadSize = 1024 * 1024 * 1024;
+                FastbootDriver.SparseMaxDownloadSize = 1024 * 1024 * 1024;
                 var transport = new ProtocolScriptTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["getvar:max-download-size"] = "OKAY0x80000000"
                 });
-                var util = new FastbootUtil(transport);
+                var util = new FastbootDriver(transport);
 
                 long maxDownloadSize = util.GetMaxDownloadSize();
 
-                Assert.Equal(FastbootUtil.SparseMaxDownloadSize, maxDownloadSize);
+                Assert.Equal(FastbootDriver.SparseMaxDownloadSize, maxDownloadSize);
             }
             finally
             {
-                FastbootUtil.SparseMaxDownloadSize = originalLimit;
+                FastbootDriver.SparseMaxDownloadSize = originalLimit;
             }
         }
 
@@ -226,7 +227,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             int attempt = 0;
             string key = "max-download-size";
 
-            var util = new FastbootUtil(new DelegatingTransport(
+            var util = new FastbootDriver(new DelegatingTransport(
                 onWrite: (cmd) =>
                 {
                     if (cmd.Equals("getvar:" + key, StringComparison.OrdinalIgnoreCase))
