@@ -2,6 +2,7 @@ using FirmwareKit.Comm.Fastboot.DataModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using System.Threading;
 
 namespace FirmwareKit.Comm.Fastboot;
 
@@ -19,6 +20,38 @@ public partial class FastbootUtil
     {
         FastbootResponse response = new FastbootResponse();
         DateTime start = DateTime.Now;
+        string pendingStatus = string.Empty;
+
+        static bool IsKnownPrefixAt(string s, int index)
+        {
+            if (index + 4 > s.Length) return false;
+            string p = s.Substring(index, 4);
+            return p == "OKAY" || p == "FAIL" || p == "INFO" || p == "TEXT" || p == "DATA";
+        }
+
+        static int FindInfoTextEnd(string s, int contentStart)
+        {
+            int delimiterIdx = s.IndexOfAny(new[] { '\0', '\r', '\n' }, contentStart);
+            if (delimiterIdx >= 0)
+            {
+                return delimiterIdx;
+            }
+
+            for (int i = contentStart + 1; i <= s.Length - 4; i++)
+            {
+                // For INFO/TEXT payloads without delimiters, only treat terminal status
+                // prefixes as boundaries. This avoids splitting on normal words such as
+                // "TEXT" that may appear in the payload.
+                if (i + 4 <= s.Length)
+                {
+                    string p = s.Substring(i, 4);
+                    if (p == "OKAY" || p == "FAIL" || p == "DATA") return i;
+                }
+            }
+
+            return -1;
+        }
+
         while ((DateTime.Now - start) < TimeSpan.FromSeconds(ReadTimeoutSeconds))
         {
             byte[] data;
@@ -41,83 +74,132 @@ public partial class FastbootUtil
 
             if (data.Length == 0)
             {
-                if ((DateTime.Now - start).TotalSeconds > 2)
-                {
-                    response.Result = FastbootState.Timeout;
-                    response.Response = "status read timed out (no data)";
-                    return response;
-                }
+                // Keep waiting until the global timeout budget expires, matching AOSP behavior.
+                Thread.Sleep(10);
                 continue;
             }
 
-            string devStatus = Encoding.UTF8.GetString(data);
-            if (devStatus.Length < 4)
+            pendingStatus += Encoding.UTF8.GetString(data);
+            while (true)
             {
-                // Try reading again to see if we can get the rest, or treat as malformed
-                continue;
-            }
-
-            // Remove any potential leading/trailing junk that can happen if the buffer was recycled
-            // though with Array.Empty/New it shouldn't, but Fastboot is ASCII-based.
-            devStatus = devStatus.Trim('\0', '\r', '\n');
-            if (devStatus.Length < 4) continue;
-            string prefix = devStatus.Substring(0, 4);
-            string content = devStatus.Length > 4 ? devStatus.Substring(4) : "";
-            if (FastbootDebug.IsEnabled && devStatus != prefix + content)
-            {
-                FastbootDebug.Log($"Raw response bytes: {BitConverter.ToString(data)}");
-            }
-
-            if (prefix == "OKAY")
-            {
-                response.Result = FastbootState.Success;
-                response.Response = content;
-                return response;
-            }
-            else if (prefix == "FAIL")
-            {
-                response.Result = FastbootState.Fail;
-                response.Response = content;
-                return response;
-            }
-            else if (prefix == "INFO")
-            {
-                response.Info.Add(content);
-                NotifyReceived(FastbootState.Info, content);
-                start = DateTime.Now;
-            }
-            else if (prefix == "TEXT")
-            {
-                response.Text += content;
-                NotifyReceived(FastbootState.Text, null, content);
-                start = DateTime.Now;
-            }
-            else if (prefix == "DATA")
-            {
-                string dataHex = content.Trim();
-                if (!long.TryParse(dataHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long dsize))
+                if (pendingStatus.Length < 4)
                 {
-                    response.Result = FastbootState.Fail;
-                    response.Response = "data size malformed: " + dataHex;
+                    break;
+                }
+
+                if (!IsKnownPrefixAt(pendingStatus, 0))
+                {
+                    int nextPrefix = -1;
+                    for (int i = 1; i <= pendingStatus.Length - 4; i++)
+                    {
+                        if (IsKnownPrefixAt(pendingStatus, i))
+                        {
+                            nextPrefix = i;
+                            break;
+                        }
+                    }
+
+                    if (nextPrefix > 0)
+                    {
+                        pendingStatus = pendingStatus.Substring(nextPrefix);
+                        continue;
+                    }
+
+                    response.Result = FastbootState.Unknown;
+                    response.Response = "device sent unknown status code: " + pendingStatus;
                     return response;
                 }
 
-                if (dsize > MAX_DOWNLOAD_SIZE)
+                string prefix = pendingStatus.Substring(0, 4);
+
+                if (prefix == "OKAY")
                 {
-                    response.Result = FastbootState.Fail;
-                    response.Response = "data size too large " + dsize;
+                    string content = pendingStatus.Length > 4 ? pendingStatus.Substring(4).TrimEnd('\0') : "";
+                    response.Result = FastbootState.Success;
+                    response.Response = content;
                     return response;
                 }
+                else if (prefix == "FAIL")
+                {
+                    string content = pendingStatus.Length > 4 ? pendingStatus.Substring(4).TrimEnd('\0') : "";
+                    response.Result = FastbootState.Fail;
+                    response.Response = content;
+                    return response;
+                }
+                else if (prefix == "INFO" || prefix == "TEXT")
+                {
+                    int endIdx = FindInfoTextEnd(pendingStatus, 4);
+                    if (endIdx < 0)
+                    {
+                        // Most transports deliver one status frame per read packet.
+                        // If no boundary marker exists, treat the current chunk as one
+                        // complete INFO/TEXT frame to avoid accidentally merging with
+                        // the next status frame.
+                        endIdx = pendingStatus.Length;
+                    }
 
-                response.Result = FastbootState.Data;
-                response.DataSize = dsize;
-                return response;
-            }
-            else
-            {
-                response.Result = FastbootState.Unknown;
-                response.Response = "device sent unknown status code: " + devStatus;
-                return response;
+                    string cleanContent = pendingStatus.Substring(4, endIdx - 4);
+                    if (prefix == "INFO")
+                    {
+                        response.Info.Add(cleanContent);
+                        NotifyReceived(FastbootState.Info, cleanContent);
+                    }
+                    else
+                    {
+                        response.Text += cleanContent;
+                        NotifyReceived(FastbootState.Text, null, cleanContent);
+                    }
+
+                    int next = endIdx;
+                    while (next < pendingStatus.Length &&
+                           (pendingStatus[next] == '\0' || pendingStatus[next] == '\r' || pendingStatus[next] == '\n'))
+                    {
+                        next++;
+                    }
+                    pendingStatus = pendingStatus.Substring(next);
+                    start = DateTime.Now;
+                    continue;
+                }
+                else if (prefix == "DATA")
+                {
+                    // DATA is expected to carry a hex size field and no extra payload.
+                    string content = pendingStatus.Length > 4 ? pendingStatus.Substring(4).TrimEnd('\0') : "";
+                    string dataHex = content.Trim();
+                    if (dataHex.Length == 0 || dataHex.Length > 8)
+                    {
+                        response.Result = FastbootState.Fail;
+                        response.Response = "data size malformed: " + dataHex;
+                        return response;
+                    }
+
+                    for (int i = 0; i < dataHex.Length; i++)
+                    {
+                        if (!Uri.IsHexDigit(dataHex[i]))
+                        {
+                            response.Result = FastbootState.Fail;
+                            response.Response = "data size malformed: " + dataHex;
+                            return response;
+                        }
+                    }
+
+                    if (!long.TryParse(dataHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long dsize))
+                    {
+                        response.Result = FastbootState.Fail;
+                        response.Response = "data size malformed: " + dataHex;
+                        return response;
+                    }
+
+                    if (dsize > MAX_DOWNLOAD_SIZE)
+                    {
+                        response.Result = FastbootState.Fail;
+                        response.Response = "data size too large " + dsize;
+                        return response;
+                    }
+
+                    response.Result = FastbootState.Data;
+                    response.DataSize = dsize;
+                    return response;
+                }
             }
         }
         response.Result = FastbootState.Timeout;

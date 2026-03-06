@@ -136,7 +136,10 @@ public partial class FastbootUtil : IDisposable
 
     public FastbootUtil(IFastbootTransport transport) => Transport = transport;
     public static int ReadTimeoutSeconds = 30;
-    public static int OnceSendDataSize = 1024 * 1024;
+    /// <summary>
+    /// Size of data to send in a single chunk (512KB for better WinUSB/Qualcomm compatibility)
+    /// </summary>
+    public static int OnceSendDataSize = 512 * 1024;
     public static int SparseMaxDownloadSize = 1024 * 1024 * 1024; // 1GB default limit to match AOSP RESPARSE_LIMIT
 
     private static readonly string[] PartitionPriority = {
@@ -274,7 +277,7 @@ public partial class FastbootUtil : IDisposable
         var resObj = RawCommand("getvar:" + key);
         if (resObj.Result == FastbootState.Fail || resObj.Result == FastbootState.Timeout)
         {
-            if (useCache) _varCache[key] = "";
+            // Do not cache transient failures/timeouts; caller can retry later.
             return "";
         }
         var res = resObj.Response;
@@ -437,17 +440,30 @@ public partial class FastbootUtil : IDisposable
         try { sizeStr = GetVar("max-download-size"); } catch { }
         if (string.IsNullOrEmpty(sizeStr)) return SparseMaxDownloadSize;
 
+        long parsedSize;
+
         if (sizeStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
         {
-            if (long.TryParse(sizeStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out long res))
-                return res;
+            if (!long.TryParse(sizeStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out parsedSize))
+            {
+                return SparseMaxDownloadSize;
+            }
         }
         else
         {
-            if (long.TryParse(sizeStr, out long res))
-                return res;
+            if (!long.TryParse(sizeStr, out parsedSize))
+            {
+                return SparseMaxDownloadSize;
+            }
         }
-        return SparseMaxDownloadSize;
+
+        if (parsedSize <= 0)
+        {
+            return SparseMaxDownloadSize;
+        }
+
+        // Match AOSP's host-side safeguard: never exceed the resparse limit.
+        return Math.Min(parsedSize, SparseMaxDownloadSize);
     }
 
     /// <summary>
@@ -584,6 +600,7 @@ public partial class FastbootUtil : IDisposable
             var header = SparseHeader.FromBytes(headerBytes);
             if (header.Magic == SparseFormat.SparseHeaderMagic)
             {
+                if (stream.CanSeek && oldPos >= 0) stream.Position = oldPos;
                 // Streaming optimization: Use SparseFile directly from stream
                 using var sfile = SparseFile.FromStream(stream);
                 FlashSparseFile(targetPartition, sfile, GetMaxDownloadSize());
@@ -591,6 +608,7 @@ public partial class FastbootUtil : IDisposable
             }
             else
             {
+                if (stream.CanSeek && oldPos >= 0) stream.Position = oldPos;
                 FlashUnsparseImage(targetPartition, stream, stream.Length);
             }
         }
@@ -1219,6 +1237,11 @@ public partial class FastbootUtil : IDisposable
             else if (arg == "--slot-other") targetSlot = otherSlot;
             else if (partition == null) partition = arg;
             else if (imgName == null) imgName = arg;
+        }
+
+        if (partition != null && imgName == null)
+        {
+            imgName = partition + ".img";
         }
 
         if (partition != null && imgName != null)

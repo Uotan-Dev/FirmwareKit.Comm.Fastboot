@@ -11,7 +11,7 @@ public partial class FastbootUtil
     public FastbootResponse FlashSparseImage(string partition, string filePath)
     {
         long maxDownloadSize = GetMaxDownloadSize();
-        SparseFile sfile = SparseFile.FromImageFile(filePath);
+        using SparseFile sfile = SparseFile.FromImageFile(filePath);
         return FlashSparseFile(partition, sfile, maxDownloadSize);
     }
 

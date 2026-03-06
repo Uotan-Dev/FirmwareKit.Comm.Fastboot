@@ -1,11 +1,13 @@
 using System.Buffers.Binary;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace FirmwareKit.Comm.Fastboot.Backend.Network;
 
 public class TcpTransport : IFastbootTransport
 {
+    private const int DefaultIoTimeoutMs = 30000;
     private readonly TcpClient _client = new();
     private NetworkStream? _stream;
     private long _messageBytesLeft = 0;
@@ -22,8 +24,20 @@ public class TcpTransport : IFastbootTransport
 
     private void InitializeProtocol()
     {
-        _client.Connect(Host, Port);
+        _client.ReceiveTimeout = DefaultIoTimeoutMs;
+        _client.SendTimeout = DefaultIoTimeoutMs;
+        Task connectTask = _client.ConnectAsync(Host, Port);
+        if (!connectTask.Wait(DefaultIoTimeoutMs))
+        {
+            throw new Exception($"Handshake failed: connect timeout after {DefaultIoTimeoutMs} ms.");
+        }
+        if (connectTask.IsFaulted)
+        {
+            throw connectTask.Exception?.GetBaseException() ?? new Exception("Handshake failed: connect failed.");
+        }
         _stream = _client.GetStream();
+        _stream.ReadTimeout = DefaultIoTimeoutMs;
+        _stream.WriteTimeout = DefaultIoTimeoutMs;
         byte[] handshake = Encoding.ASCII.GetBytes("FB01");
         _stream.Write(handshake, 0, handshake.Length);
 

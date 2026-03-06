@@ -98,9 +98,8 @@ public class WinUSBDevice : UsbDevice
         WinUsb_SetPipePolicy(WinUSBHandle, ReadBulkID, RAW_IO, 1, ref bFalse);
         WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, RAW_IO, 1, ref bFalse);
 
-        // Enable SHORT_PACKET_TERMINATE (ZLP) for Fastboot compliance.
-        // This makes WinUSB automatically send a Zero Length Packet if the transfer is a multiple of MaxPacketSize.
-        WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, SHORT_PACKET_TERMINATE, 1, ref bTrue);
+        // Align with AOSP host behavior: avoid forcing ZLP from the host side.
+        WinUsb_SetPipePolicy(WinUSBHandle, WriteBulkID, SHORT_PACKET_TERMINATE, 1, ref bFalse);
 
         return 0;
     }
@@ -178,6 +177,11 @@ public class WinUSBDevice : UsbDevice
     {
         if (WinUSBHandle == IntPtr.Zero) throw new Exception("Device handle is closed.");
 
+        if (length == 0)
+        {
+            return 0;
+        }
+
         uint totalBytesWritten = 0;
         uint toWrite = (uint)length;
         uint bytesWritten;
@@ -189,11 +193,8 @@ public class WinUSBDevice : UsbDevice
             // Critical Fix for ZLP (Zero Length Packet):
             // Some bootloaders (like QCOM) wait specifically for a Zero Length Packet
             // if the transfer size is a multiple of MaxPacketSize (512).
-            if (length > 0 && length % 512 == 0)
-            {
-                uint zlpWritten;
-                WinUsb_WritePipe(WinUSBHandle, WriteBulkID, Array.Empty<byte>(), 0, out zlpWritten, IntPtr.Zero);
-            }
+            // We intentionally keep SHORT_PACKET_TERMINATE disabled to mirror AOSP host behavior
+            // and avoid forcing host-side ZLP from the transport layer.
         }
         else
         {

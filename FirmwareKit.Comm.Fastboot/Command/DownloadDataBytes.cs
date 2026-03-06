@@ -9,6 +9,15 @@ public partial class FastbootUtil
     /// </summary>
     public FastbootResponse DownloadData(byte[] data)
     {
+        if (data == null || data.Length == 0)
+        {
+            return new FastbootResponse
+            {
+                Result = FastbootState.Fail,
+                Response = "invalid download size"
+            };
+        }
+
         FastbootResponse response = RawCommand("download:" + data.Length.ToString("x8"));
         if (response.Result != FastbootState.Data)
             return response;

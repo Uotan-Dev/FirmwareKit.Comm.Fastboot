@@ -229,10 +229,7 @@ public class MacOSUsbDevice : UsbDevice
                 lenRemaining -= lenToSend;
                 count += lenToSend;
             }
-            if (length == 0)
-            {
-                writePipe(interfacePtr, bulkOut, IntPtr.Zero, 0, 5000, 5000);
-            }
+            // Align with AOSP host behavior: avoid forcing explicit host-side ZLP.
             return count > 0 ? count : (length == 0 ? 0 : -1);
         }
         finally

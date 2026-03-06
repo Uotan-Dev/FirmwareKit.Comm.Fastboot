@@ -7,15 +7,15 @@ namespace FirmwareKit.Comm.Fastboot.Backend.Network;
 /// Fastboot over UDP Transport
 /// Fully implements the AOSP Fastboot over Network protocol (headers, sequence numbers, handshake)
 /// </summary>
-public class UdpTransport(string host, int port = 5554) : IFastbootTransport
+public class UdpTransport : IFastbootTransport
 {
-    private readonly UdpClient _client = new();
-    private readonly IPEndPoint _endpoint = new(IPAddress.Parse(host), port);
+    private readonly UdpClient _client;
+    private readonly IPEndPoint _endpoint;
     private int _sequence = 0;
     private int _maxDataLength = 512 - 4;
-    private readonly int _timeoutMs = 1000;
+    private readonly int _timeoutMs;
     private const int HeaderSize = 4;
-    private readonly List<byte> _readBuffer = [];
+    private const int HostMaxPacketSize = 512;
 
     private enum PacketId : byte
     {
@@ -31,29 +31,46 @@ public class UdpTransport(string host, int port = 5554) : IFastbootTransport
         Continuation = 0x01
     }
 
-    public string Host { get; } = host;
-    public int Port { get; } = port;
-    private const int MaxTransmissionAttempts = 10;
+    public string Host { get; }
+    public int Port { get; }
+    private readonly int _maxTransmissionAttempts;
+
+    public UdpTransport(string host, int port = 5554, int timeoutMs = 1000, int maxTransmissionAttempts = 10)
+    {
+        if (timeoutMs <= 0) throw new ArgumentOutOfRangeException(nameof(timeoutMs));
+        if (maxTransmissionAttempts <= 0) throw new ArgumentOutOfRangeException(nameof(maxTransmissionAttempts));
+
+        Host = host;
+        Port = port;
+        _timeoutMs = timeoutMs;
+        _maxTransmissionAttempts = maxTransmissionAttempts;
+        _client = new UdpClient();
+        _endpoint = new IPEndPoint(IPAddress.Parse(host), port);
+
+        InitializeProtocol();
+    }
 
     private void InitializeProtocol()
     {
         _client.Client.ReceiveTimeout = _timeoutMs;
         _client.Client.SendTimeout = _timeoutMs;
 
-        byte[] response = SendSinglePacket(PacketId.DeviceQuery, 0, PacketFlag.None, [], 0, 0, MaxTransmissionAttempts);
+        byte[] response = SendSinglePacket(PacketId.DeviceQuery, 0, PacketFlag.None, [], 0, 0, _maxTransmissionAttempts, out _);
         if (response.Length < 2) throw new Exception("Invalid query response from target.");
         _sequence = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(0, 2));
         byte[] initData = new byte[4];
         BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(0, 2), 0x0001);
-        BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(2, 2), 512);
-        response = SendSinglePacket(PacketId.Initialization, (ushort)_sequence, PacketFlag.None, initData, initData.Length, MaxTransmissionAttempts);
+        BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(2, 2), HostMaxPacketSize);
+        response = SendSinglePacket(PacketId.Initialization, (ushort)_sequence, PacketFlag.None, initData, initData.Length, _maxTransmissionAttempts, out _);
         if (response.Length < 4) throw new Exception("Invalid initialization response from target.");
 
         ushort version = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(0, 2));
         ushort packetSize = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(2, 2));
 
         if (version < 1) throw new Exception($"Target reported invalid protocol version {version}");
+        if (packetSize < HostMaxPacketSize) throw new Exception($"Target reported invalid packet size {packetSize}");
 
+        packetSize = (ushort)Math.Min(HostMaxPacketSize, (int)packetSize);
         _maxDataLength = packetSize - HeaderSize;
         _sequence = (_sequence + 1) & 0xFFFF;
     }
@@ -61,83 +78,127 @@ public class UdpTransport(string host, int port = 5554) : IFastbootTransport
     private byte[] SendDataInternal(PacketId id, byte[] txData, int txLength, int attempts)
     {
         int offset = 0;
-        List<byte> fullResponse = new List<byte>();
+        List<byte> fullResponse = [];
 
         do
         {
             int chunkLen = Math.Min(txLength - offset, _maxDataLength);
             PacketFlag flag = (offset + chunkLen < txLength) ? PacketFlag.Continuation : PacketFlag.None;
 
-            byte[] rxData = SendSinglePacket(id, (ushort)_sequence, flag, txData, offset, chunkLen, attempts);
+            byte[] rxData = SendSinglePacket(id, (ushort)_sequence, flag, txData, offset, chunkLen, attempts, out ushort nextSeq);
             fullResponse.AddRange(rxData);
 
-            _sequence = (_sequence + 1) & 0xFFFF;
+            _sequence = nextSeq;
             offset += chunkLen;
         } while (offset < txLength);
 
         return fullResponse.ToArray();
     }
 
-    private byte[] SendSinglePacket(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txLen, int attempts)
+    private byte[] SendSinglePacket(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txLen, int attempts, out ushort nextSeq)
     {
-        return SendSinglePacket(id, seq, flag, txData, 0, txLen, attempts);
+        return SendSinglePacket(id, seq, flag, txData, 0, txLen, attempts, out nextSeq);
     }
 
-    private byte[] SendSinglePacket(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txOffset, int txLen, int attempts)
+    private byte[] SendSinglePacket(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txOffset, int txLen, int attempts, out ushort nextSeq)
     {
-        byte[] packet = new byte[HeaderSize + txLen];
-        packet[0] = (byte)id;
-        packet[1] = (byte)flag;
-        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2, 2), seq);
-        if (txLen > 0) Array.Copy(txData, txOffset, packet, HeaderSize, txLen);
+        PacketId currentId = id;
+        PacketFlag currentFlag = flag;
+        int currentTxOffset = txOffset;
+        int currentTxLen = txLen;
+        ushort currentSeq = seq;
+        List<byte> fullResponse = [];
 
-        for (int i = 0; i < attempts; i++)
+        while (true)
         {
-            _client.Send(packet, packet.Length, _endpoint);
+            byte[] packet = new byte[HeaderSize + currentTxLen];
+            packet[0] = (byte)currentId;
+            packet[1] = (byte)currentFlag;
+            BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2, 2), currentSeq);
+            if (currentTxLen > 0) Array.Copy(txData, currentTxOffset, packet, HeaderSize, currentTxLen);
 
-            try
+            bool gotValidResponse = false;
+            for (int i = 0; i < attempts; i++)
             {
-                IPEndPoint from = new IPEndPoint(IPAddress.Any, 0);
-                byte[] rxPacket = _client.Receive(ref from);
-                if (rxPacket.Length < HeaderSize) continue;
-                if (BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2)) == seq &&
-                    (rxPacket[0] == (byte)id || rxPacket[0] == (byte)PacketId.Error))
-                {
-                    if (rxPacket[0] == (byte)PacketId.Error)
-                    {
-                        throw new Exception("Target returned error response.");
-                    }
+                _client.Send(packet, packet.Length, _endpoint);
 
-                    byte[] rxData = new byte[rxPacket.Length - HeaderSize];
-                    Array.Copy(rxPacket, HeaderSize, rxData, 0, rxData.Length);
-                    return rxData;
+                try
+                {
+                    while (true)
+                    {
+                        IPEndPoint from = new(IPAddress.Any, 0);
+                        byte[] rxPacket = _client.Receive(ref from);
+                        if (rxPacket.Length < HeaderSize) continue;
+
+                        ushort responseSeq = BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2));
+                        byte responseId = rxPacket[0];
+                        if (responseSeq != currentSeq) continue;
+                        if (responseId != (byte)currentId && responseId != (byte)PacketId.Error) continue;
+
+                        if (responseId == (byte)PacketId.Error)
+                        {
+                            throw new Exception("Target returned error response.");
+                        }
+
+                        if (rxPacket.Length > HeaderSize)
+                        {
+                            fullResponse.AddRange(rxPacket.AsSpan(HeaderSize).ToArray());
+                        }
+
+                        gotValidResponse = true;
+                        currentSeq = (ushort)((currentSeq + 1) & 0xFFFF);
+
+                        bool continuation = (rxPacket[1] & (byte)PacketFlag.Continuation) != 0;
+                        if (!continuation)
+                        {
+                            nextSeq = currentSeq;
+                            return fullResponse.ToArray();
+                        }
+
+                        // Prompt the target for the next continuation fragment.
+                        currentId = (PacketId)responseId;
+                        currentFlag = PacketFlag.None;
+                        currentTxOffset = 0;
+                        currentTxLen = 0;
+                        break;
+                    }
+                }
+                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+                {
+                    continue;
+                }
+
+                if (gotValidResponse)
+                {
+                    break;
                 }
             }
-            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+
+            if (!gotValidResponse)
             {
-                continue;
+                throw new Exception($"Failed to receive response after {attempts} attempts.");
             }
         }
-        throw new Exception($"Failed to receive response after {attempts} attempts.");
     }
 
     public byte[] Read(int length)
     {
-        if (_readBuffer.Count == 0)
+        if (length <= 0) return Array.Empty<byte>();
+        byte[] response = SendDataInternal(PacketId.Fastboot, [], 0, _maxTransmissionAttempts);
+        if (response.Length > length)
         {
-            return Array.Empty<byte>();
+            throw new Exception("UDP protocol error: receive overflow, target sent too much fastboot data.");
         }
-
-        int toCopy = Math.Min(length, _readBuffer.Count);
-        byte[] result = _readBuffer.Take(toCopy).ToArray();
-        _readBuffer.RemoveRange(0, toCopy);
-        return result;
+        return response;
     }
 
     public long Write(byte[] data, int length)
     {
-        byte[] response = SendDataInternal(PacketId.Fastboot, data, length, MaxTransmissionAttempts);
-        _readBuffer.AddRange(response);
+        byte[] response = SendDataInternal(PacketId.Fastboot, data, length, _maxTransmissionAttempts);
+        if (response.Length > 0)
+        {
+            throw new Exception("UDP protocol error: target sent fastboot data out-of-turn.");
+        }
         return length;
     }
 

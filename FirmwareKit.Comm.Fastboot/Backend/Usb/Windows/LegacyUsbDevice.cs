@@ -1,11 +1,13 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using static FirmwareKit.Comm.Fastboot.Backend.Usb.Windows.Win32API;
 
 namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows
 {
     public class LegacyUsbDevice : UsbDevice
     {
+        private const int IoTimeoutMs = 30000;
         public static uint IoGetSerialCode => CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_READ_ACCESS);
         public static uint IoGetDescriptorCode => CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_READ_ACCESS);
 
@@ -51,25 +53,45 @@ namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows
 
         public override byte[] Read(int length)
         {
-            byte[] buffer = new byte[length];
-            uint read;
-            if (ReadFile(fileHandle, buffer, (uint)length, out read, IntPtr.Zero))
+            var readTask = Task.Run(() =>
             {
-                byte[] result = new byte[read];
-                Array.Copy(buffer, result, (int)read);
-                return result;
+                byte[] buffer = new byte[length];
+                uint read;
+                if (ReadFile(fileHandle, buffer, (uint)length, out read, IntPtr.Zero))
+                {
+                    byte[] result = new byte[read];
+                    Array.Copy(buffer, result, (int)read);
+                    return result;
+                }
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            });
+
+            if (!readTask.Wait(IoTimeoutMs))
+            {
+                throw new TimeoutException($"Legacy USB read timed out after {IoTimeoutMs} ms.");
             }
-            throw new Win32Exception(Marshal.GetLastWin32Error());
+
+            return readTask.GetAwaiter().GetResult();
         }
 
         public override long Write(byte[] data, int length)
         {
-            uint written;
-            if (WriteFile(fileHandle, data, (uint)length, out written, IntPtr.Zero))
+            var writeTask = Task.Run(() =>
             {
-                return written;
+                uint written;
+                if (WriteFile(fileHandle, data, (uint)length, out written, IntPtr.Zero))
+                {
+                    return (long)written;
+                }
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            });
+
+            if (!writeTask.Wait(IoTimeoutMs))
+            {
+                throw new TimeoutException($"Legacy USB write timed out after {IoTimeoutMs} ms.");
             }
-            throw new Win32Exception(Marshal.GetLastWin32Error());
+
+            return writeTask.GetAwaiter().GetResult();
         }
 
         public override void Reset()

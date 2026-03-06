@@ -181,22 +181,8 @@ public class LinuxUsbDevice : UsbDevice
 
         if (length == 0)
         {
-            GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
-            try
-            {
-                usbdevfs_bulktransfer bulk = new usbdevfs_bulktransfer
-                {
-                    ep = ep_out,
-                    len = 0,
-                    timeout = 0,
-                    data = handle.AddrOfPinnedObject()
-                };
-
-                uint bulkCode = (IntPtr.Size == 8) ? USBDEVFS_BULK_X86_64 : USBDEVFS_BULK_X86;
-                int n = ioctl(fd, bulkCode, ref bulk);
-                return n == 0 ? 0 : -1;
-            }
-            finally { handle.Free(); }
+            // Align with AOSP host behavior: avoid forcing explicit host-side ZLP.
+            return 0;
         }
 
         while (count < length)

@@ -196,5 +196,83 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Assert.Contains("reboot-bootloader", transport.Commands);
             Assert.Contains("reboot", transport.Commands);
         }
+
+        [Fact]
+        public void GetMaxDownloadSize_ClampsToSparseLimit()
+        {
+            int originalLimit = FastbootUtil.SparseMaxDownloadSize;
+            try
+            {
+                FastbootUtil.SparseMaxDownloadSize = 1024 * 1024 * 1024;
+                var transport = new ProtocolScriptTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["getvar:max-download-size"] = "OKAY0x80000000"
+                });
+                var util = new FastbootUtil(transport);
+
+                long maxDownloadSize = util.GetMaxDownloadSize();
+
+                Assert.Equal(FastbootUtil.SparseMaxDownloadSize, maxDownloadSize);
+            }
+            finally
+            {
+                FastbootUtil.SparseMaxDownloadSize = originalLimit;
+            }
+        }
+
+        [Fact]
+        public void GetVar_FailureIsNotCached_AllowsRetrySuccess()
+        {
+            // First read fails, second read succeeds for same key.
+            int attempt = 0;
+            string key = "max-download-size";
+
+            var util = new FastbootUtil(new DelegatingTransport(
+                onWrite: (cmd) =>
+                {
+                    if (cmd.Equals("getvar:" + key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        attempt++;
+                        return attempt == 1 ? "FAILtemporary" : "OKAY0x100000";
+                    }
+                    return "OKAY";
+                }));
+
+            string first = util.GetVar(key);
+            string second = util.GetVar(key);
+
+            Assert.Equal(string.Empty, first);
+            Assert.Equal("0x100000", second);
+        }
+
+        private sealed class DelegatingTransport : IFastbootTransport
+        {
+            private readonly Func<string, string> _onWrite;
+            private readonly Queue<byte[]> _readQueue = new();
+
+            public DelegatingTransport(Func<string, string> onWrite)
+            {
+                _onWrite = onWrite;
+            }
+
+            public byte[] Read(int length)
+            {
+                if (_readQueue.Count == 0)
+                {
+                    return Encoding.UTF8.GetBytes("OKAY");
+                }
+                return _readQueue.Dequeue();
+            }
+
+            public long Write(byte[] data, int length)
+            {
+                string cmd = Encoding.UTF8.GetString(data, 0, length);
+                string response = _onWrite(cmd);
+                _readQueue.Enqueue(Encoding.UTF8.GetBytes(response));
+                return length;
+            }
+
+            public void Dispose() { }
+        }
     }
 }
