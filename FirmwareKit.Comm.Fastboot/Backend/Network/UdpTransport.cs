@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Network;
+namespace FirmwareKit.Comm.Fastboot.Network;
 /// <summary>
 /// Fastboot over UDP Transport
 /// Fully implements the AOSP Fastboot over Network protocol (headers, sequence numbers, handshake)

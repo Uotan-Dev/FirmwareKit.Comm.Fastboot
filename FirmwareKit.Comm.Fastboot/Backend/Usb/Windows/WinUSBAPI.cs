@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows;
+namespace FirmwareKit.Comm.Fastboot.Usb.Windows;
 
 public class WinUSBAPI
 {

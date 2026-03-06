@@ -1,4 +1,3 @@
-using FirmwareKit.Comm.Fastboot.Backend.Network;
 using System.Globalization;
 using System.Text;
 

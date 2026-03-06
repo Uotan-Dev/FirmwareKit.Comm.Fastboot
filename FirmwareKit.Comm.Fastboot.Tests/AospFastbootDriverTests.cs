@@ -1,5 +1,3 @@
-using FirmwareKit.Comm.Fastboot.Backend.Network;
-using FirmwareKit.Comm.Fastboot.DataModel;
 using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
@@ -114,6 +112,54 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             Assert.Equal(FastbootState.Fail, response.Result);
             Assert.Equal("data too large", response.Response);
+        }
+
+        [Fact]
+        public void Test_ConsecutiveInfoInSinglePacket()
+        {
+            var transport = new MockTransport();
+            var util = new FastbootUtil(transport);
+
+            // Single packet contains two INFO frames followed by OKAY
+            transport.EnqueueResponse("INFOfirst lineINFOsecond lineOKAY");
+
+            var response = util.RawCommand("oem dmesg");
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Equal(2, response.Info.Count);
+            Assert.Equal("first line", response.Info[0]);
+            Assert.Equal("second line", response.Info[1]);
+        }
+
+        [Fact]
+        public void Test_InfoWithoutDelimiterFollowedByOkay()
+        {
+            var transport = new MockTransport();
+            var util = new FastbootUtil(transport);
+
+            // INFO payload without newline then OKAY immediately in same packet
+            transport.EnqueueResponse("INFOpartial infoOKAY");
+
+            var response = util.RawCommand("getvar:all");
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Single(response.Info);
+            Assert.Equal("partial info", response.Info[0]);
+        }
+
+        [Fact]
+        public void Test_MalformedDataLength()
+        {
+            var transport = new MockTransport();
+            var util = new FastbootUtil(transport);
+
+            // DATA followed by non-hex content should be treated as malformed
+            transport.EnqueueResponse("DATAGARBAGE");
+
+            var response = util.RawCommand("download:00000010");
+
+            Assert.Equal(FastbootState.Fail, response.Result);
+            Assert.Contains("data size malformed", response.Response);
         }
     }
 }

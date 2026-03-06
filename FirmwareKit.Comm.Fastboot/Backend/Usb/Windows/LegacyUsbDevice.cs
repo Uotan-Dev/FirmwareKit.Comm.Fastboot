@@ -1,10 +1,8 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
-using static FirmwareKit.Comm.Fastboot.Backend.Usb.Windows.Win32API;
+using static FirmwareKit.Comm.Fastboot.Usb.Windows.Win32API;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows
-{
+namespace FirmwareKit.Comm.Fastboot.Usb.Windows;
     public class LegacyUsbDevice : UsbDevice
     {
         private const int IoTimeoutMs = 30000;
@@ -109,7 +107,6 @@ namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows
             GC.SuppressFinalize(this);
         }
     }
-}
 
 
 

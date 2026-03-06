@@ -1,10 +1,10 @@
-﻿using FirmwareKit.Comm.Fastboot.DataModel;
 
-namespace FirmwareKit.Comm.Fastboot.Utils;
 
-internal class ProductInfoParser(FastbootUtil fastboot)
+namespace FirmwareKit.Comm.Fastboot;
+
+internal class ProductInfoParser(FastbootDriver fastboot)
 {
-    private FastbootUtil _fastboot = fastboot;
+    private FastbootDriver _fastboot = fastboot;
     private Dictionary<string, string> _varCache = [];
 
     public bool Validate(string content, out string? error)

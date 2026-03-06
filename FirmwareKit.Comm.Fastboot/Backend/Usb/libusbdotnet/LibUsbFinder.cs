@@ -1,6 +1,6 @@
 using LibUsbDotNet.LibUsb;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.libusbdotnet;
+namespace FirmwareKit.Comm.Fastboot.Usb.libusbdotnet;
 
 public class LibUsbFinder
 {

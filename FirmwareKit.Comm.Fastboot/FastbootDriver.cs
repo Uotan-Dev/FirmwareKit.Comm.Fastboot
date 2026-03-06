@@ -1,7 +1,5 @@
-using FirmwareKit.Comm.Fastboot.Backend.Network;
-using FirmwareKit.Comm.Fastboot.Backend.Usb;
-using FirmwareKit.Comm.Fastboot.DataModel;
-using FirmwareKit.Comm.Fastboot.Utils;
+using FirmwareKit.Comm.Fastboot.Network;
+using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
 using FirmwareKit.Sparse.Core;
 using FirmwareKit.Sparse.Models;
@@ -11,10 +9,11 @@ using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil : IDisposable
+public partial class FastbootDriver : IDisposable
 {
     public void Dispose()
     {
+        FastbootDebug.Log($"Dispose()");
         Transport?.Dispose();
     }
 
@@ -23,6 +22,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public void ResetTransport()
     {
+        FastbootDebug.Log($"ResetTransport()");
         if (Transport is UsbDevice usb)
         {
             usb.Reset();
@@ -38,6 +38,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public bool IsUserspace()
     {
+        FastbootDebug.Log($"IsUserspace()");
         try
         {
             return GetVar("is-userspace") == "yes";
@@ -53,6 +54,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public bool IsLogicalOptimized(string partition)
     {
+        FastbootDebug.Log($"IsLogicalOptimized(partition={partition})");
         if (_logicalPartitionsFromMetadata != null)
         {
             return _logicalPartitionsFromMetadata.Contains(partition);
@@ -65,6 +67,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public void LoadLogicalPartitionsFromMetadata(string superImagePath)
     {
+        FastbootDebug.Log($"LoadLogicalPartitionsFromMetadata(superImagePath={superImagePath})");
         if (!File.Exists(superImagePath))
         {
             _logicalPartitionsFromMetadata = null;
@@ -90,12 +93,14 @@ public partial class FastbootUtil : IDisposable
 
     public static LpMetadata ReadFromImageFile(string path)
     {
+        FastbootDebug.Log($"ReadFromImageFile(path={path})");
         using var stream = File.OpenRead(path);
         return ReadFromImageStream(stream);
     }
 
     public static LpMetadata ReadFromImageStream(Stream stream)
     {
+        FastbootDebug.Log($"ReadFromImageStream(stream={stream})");
         long[] tryOffsets = [ MetadataFormat.LP_PARTITION_RESERVED_BYTES,
                       MetadataFormat.LP_PARTITION_RESERVED_BYTES + MetadataFormat.LP_METADATA_GEOMETRY_SIZE,
                       0 ];
@@ -134,7 +139,7 @@ public partial class FastbootUtil : IDisposable
     private Dictionary<string, bool> _hasSlotCache = [];
     private HashSet<string>? _logicalPartitionsFromMetadata = null;
 
-    public FastbootUtil(IFastbootTransport transport) => Transport = transport;
+    public FastbootDriver(IFastbootTransport transport) => Transport = transport;
     public static int ReadTimeoutSeconds = 30;
     /// <summary>
     /// Size of data to send in a single chunk (512KB for better WinUSB/Qualcomm compatibility)
@@ -153,10 +158,21 @@ public partial class FastbootUtil : IDisposable
     public event EventHandler<(long, long)>? DataTransferProgressChanged;
     public event EventHandler<string>? CurrentStepChanged;
 
-    public void NotifyCurrentStep(string step) => CurrentStepChanged?.Invoke(this, step);
-    public void NotifyProgress(long current, long total) => DataTransferProgressChanged?.Invoke(this, (current, total));
+    public void NotifyCurrentStep(string step)
+    {
+        FastbootDebug.Log($"NotifyCurrentStep(step={step})");
+        CurrentStepChanged?.Invoke(this, step);
+    }
+    public void NotifyProgress(long current, long total)
+    {
+        FastbootDebug.Log($"NotifyProgress(current={current}, total={total})");
+        DataTransferProgressChanged?.Invoke(this, (current, total));
+    }
     public void NotifyReceived(FastbootState state, string? info = null, string? text = null)
-    => ReceivedFromDevice?.Invoke(this, new FastbootReceivedFromDeviceEventArgs(state, info, text));
+    {
+        FastbootDebug.Log($"NotifyReceived(state={state}, info={info}, text={text})");
+        ReceivedFromDevice?.Invoke(this, new FastbootReceivedFromDeviceEventArgs(state, info, text));
+    }
 
     /// <summary>
     /// Checks if a partition has slots based on the "has-slot" variable from bootloader.
@@ -164,6 +180,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public bool HasSlot(string partition)
     {
+        FastbootDebug.Log($"HasSlot(partition={partition})");
         if (string.IsNullOrEmpty(partition)) return false;
         if (_hasSlotCache.TryGetValue(partition, out bool has)) return has;
 
@@ -186,6 +203,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public string GetCurrentSlot()
     {
+        FastbootDebug.Log($"GetCurrentSlot()");
         try
         {
             string slot = GetVar("current-slot");
@@ -201,8 +219,9 @@ public partial class FastbootUtil : IDisposable
 
     /// <param name="serial">Optional: specify the serial number</param>
     /// <param name="timeoutSeconds">The timeout duration (seconds), -1 means wait forever</param>
-    public static FastbootUtil? WaitForDevice(Func<List<UsbDevice>> deviceFinder, string? serial = null, int timeoutSeconds = -1)
+    public static FastbootDriver? WaitForDevice(Func<List<UsbDevice>> deviceFinder, string? serial = null, int timeoutSeconds = -1)
     {
+        FastbootDebug.Log($"WaitForDevice(deviceFinder={deviceFinder}, serial={serial}, timeoutSeconds={timeoutSeconds})");
         DateTime start = DateTime.Now;
         while (timeoutSeconds == -1 || (DateTime.Now - start).TotalSeconds < timeoutSeconds)
         {
@@ -224,7 +243,7 @@ public partial class FastbootUtil : IDisposable
             if (found != null)
             {
                 foreach (var d in devices) if (d != found) d.Dispose();
-                return new FastbootUtil(found);
+                return new FastbootDriver(found);
             }
 
             foreach (var d in devices) d.Dispose();
@@ -236,7 +255,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public Dictionary<string, string> GetVarAll()
     {
-        FastbootDebug.Log("Sending command: getvar:all");
+        FastbootDebug.Log($"GetVarAll()");
         _varCache.Clear();
         try
         {
@@ -273,6 +292,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public string GetVar(string key, bool useCache = true)
     {
+        FastbootDebug.Log($"GetVar(key={key}, useCache={useCache})");
         if (useCache && _varCache.TryGetValue(key, out string? cached)) return cached;
         var resObj = RawCommand("getvar:" + key);
         if (resObj.Result == FastbootState.Fail || resObj.Result == FastbootState.Timeout)
@@ -290,6 +310,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public int GetSlotCount()
     {
+        FastbootDebug.Log($"GetSlotCount()");
         int slot_count = 1;
         string count = GetVar("slot-count");
         int.TryParse(count, out slot_count);
@@ -492,6 +513,7 @@ public partial class FastbootUtil : IDisposable
     /// </summary>
     public void FlashImage(string partition, string filePath, string? slotOverride = null)
     {
+        FastbootDebug.Log($"FlashImage(partition={partition}, file={filePath}, slot={slotOverride ?? "null"})");
         if (!File.Exists(filePath)) throw new FileNotFoundException(filePath);
 
         string targetPartition = partition;
@@ -507,6 +529,8 @@ public partial class FastbootUtil : IDisposable
             targetPartition = partition + "_" + (slotOverride ?? GetCurrentSlot());
         }
 
+        FastbootDebug.Log($"Target Partition: {targetPartition}");
+
         // AOSP Optimal Placement: For logical partitions, zero out existing size
         // ResizeLogicalPartition also handles ensuring userspace (fastbootd)
         if (IsLogicalOptimized(targetPartition))
@@ -514,41 +538,16 @@ public partial class FastbootUtil : IDisposable
             try { ResizeLogicalPartition(targetPartition, 0); } catch { }
         }
 
-        long maxDownloadSize = GetMaxDownloadSize();
         try
         {
-            var header = SparseFile.PeekHeader(filePath);
-            if (header.Magic == SparseFormat.SparseHeaderMagic)
-            {
-                FlashSparseImage(targetPartition, filePath);
-            }
-            else
-            {
-                FileInfo fi = new FileInfo(filePath);
-                if (fi.Length > maxDownloadSize)
-                {
-                    // Original image is too large, automatically encapsulate as sparse segmented
-                    FlashSparseFile(targetPartition, SparseFile.FromRawFile(filePath), maxDownloadSize);
-                }
-                else
-                {
-                    using var fs = File.OpenRead(filePath);
-                    FlashUnsparseImage(targetPartition, fs, fs.Length);
-                }
-            }
-        }
-        catch (Exception)
-        {
             FileInfo fi = new FileInfo(filePath);
-            if (fi.Length > maxDownloadSize)
-            {
-                FlashSparseFile(targetPartition, SparseFile.FromRawFile(filePath), maxDownloadSize);
-            }
-            else
-            {
-                using var fs = File.OpenRead(filePath);
-                FlashUnsparseImage(targetPartition, fs, fs.Length);
-            }
+            using var fs = File.OpenRead(filePath);
+            FlashUnsparseImage(targetPartition, fs, fi.Length).ThrowIfError();
+        }
+        catch (Exception ex)
+        {
+            if (FastbootDebug.IsEnabled) Console.Error.WriteLine("[DEBUG] FlashImage Failed: " + ex);
+            throw;
         }
     }
 
@@ -625,6 +624,23 @@ public partial class FastbootUtil : IDisposable
     public bool IsLogical(string partition)
     {
         try { return GetVar("is-logical:" + partition) == "yes"; } catch { return false; }
+    }
+
+    /// <summary>
+    /// Gets the storage space size of the partition
+    /// </summary>
+    public long GetPartitionSizeLong(string partition)
+    {
+        try
+        {
+            var res = GetVar("partition-size:" + partition);
+            if (string.IsNullOrEmpty(res)) return 0;
+            if (res.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                return Convert.ToInt64(res, 16);
+            else
+                return Convert.ToInt64(res);
+        }
+        catch { return 0; }
     }
 
     /// <summary>

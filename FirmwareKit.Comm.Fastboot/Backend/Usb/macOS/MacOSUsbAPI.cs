@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.macOS;
+namespace FirmwareKit.Comm.Fastboot.Usb.macOS;
 
 public static class MacOSUsbAPI
 {

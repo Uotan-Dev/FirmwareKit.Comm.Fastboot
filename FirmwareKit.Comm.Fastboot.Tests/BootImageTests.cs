@@ -1,4 +1,3 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
 using System.Runtime.InteropServices;
 using System.Text;
 

@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Linux;
+namespace FirmwareKit.Comm.Fastboot.Usb.Linux;
 
 public static class LinuxUsbAPI
 {

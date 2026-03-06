@@ -1,8 +1,8 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     /// <summary>
     /// Executes stage command, sending local data to device memory (used for subsequent boot or flash instructions, depending on the device)

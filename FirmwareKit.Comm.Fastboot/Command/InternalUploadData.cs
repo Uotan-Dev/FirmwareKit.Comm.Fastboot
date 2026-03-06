@@ -1,8 +1,8 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     /// <summary>
     /// Uploads data from device (corresponding to the upload in the protocol)

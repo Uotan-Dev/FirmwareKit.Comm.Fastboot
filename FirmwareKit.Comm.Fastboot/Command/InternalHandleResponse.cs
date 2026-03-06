@@ -1,12 +1,11 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
-using System.Threading;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     // AOSP constant for response size
     private const int FB_RESPONSE_SZ = 256;
@@ -18,6 +17,7 @@ public partial class FastbootUtil
     /// </summary>
     public FastbootResponse HandleResponse()
     {
+        FastbootDebug.Log($"HandleResponse()");
         FastbootResponse response = new FastbootResponse();
         DateTime start = DateTime.Now;
         string pendingStatus = string.Empty;
@@ -37,15 +37,34 @@ public partial class FastbootUtil
                 return delimiterIdx;
             }
 
+            static bool IsTerminalPrefix(string p) => p == "OKAY" || p == "FAIL" || p == "DATA";
+
+            int firstTerminalIdx = -1;
             for (int i = contentStart + 1; i <= s.Length - 4; i++)
             {
-                // For INFO/TEXT payloads without delimiters, only treat terminal status
-                // prefixes as boundaries. This avoids splitting on normal words such as
-                // "TEXT" that may appear in the payload.
+                string p = s.Substring(i, 4);
+                if (IsTerminalPrefix(p))
+                {
+                    firstTerminalIdx = i;
+                    break;
+                }
+            }
+
+            for (int i = contentStart + 1; i <= s.Length - 4; i++)
+            {
+                // For INFO/TEXT payloads without delimiters, treat any known
+                // status prefix (OKAY/FAIL/DATA/INFO/TEXT) as a boundary. This
+                // allows consecutive INFO/TEXT frames in a single packet to be
+                // split properly while still protecting against malformed streams.
                 if (i + 4 <= s.Length)
                 {
                     string p = s.Substring(i, 4);
-                    if (p == "OKAY" || p == "FAIL" || p == "DATA") return i;
+                    if (IsTerminalPrefix(p)) return i;
+
+                    // Avoid splitting plain payload text that happens to contain
+                    // INFO/TEXT tokens. Only split INFO/TEXT mid-payload when the
+                    // packet also contains a terminal status marker later.
+                    if ((p == "INFO" || p == "TEXT") && firstTerminalIdx > i) return i;
                 }
             }
 

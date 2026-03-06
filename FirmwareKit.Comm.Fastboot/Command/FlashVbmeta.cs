@@ -1,10 +1,10 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
-using FirmwareKit.Comm.Fastboot.Utils;
+
+
 using System.Runtime.InteropServices;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     /// <summary>
     /// Flashes VBMeta image and optionally disables verification (corresponding to --disable-verity / --disable-verification)

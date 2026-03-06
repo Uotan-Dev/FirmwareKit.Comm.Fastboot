@@ -1,7 +1,7 @@
 using LibUsbDotNet.LibUsb;
 using LibUsbDotNet.Main;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.libusbdotnet;
+namespace FirmwareKit.Comm.Fastboot.Usb.libusbdotnet;
 
 public class LibUsbDevice : UsbDevice
 {

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using static FirmwareKit.Comm.Fastboot.Backend.Usb.Linux.LinuxUsbAPI;
+using static FirmwareKit.Comm.Fastboot.Usb.Linux.LinuxUsbAPI;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Linux;
+namespace FirmwareKit.Comm.Fastboot.Usb.Linux;
 
 public class LinuxUsbFinder
 {
@@ -82,7 +82,7 @@ public class LinuxUsbFinder
 
                                 if (epIn != 0 && epOut != 0)
                                 {
-                                    devices.Add(new LinuxUsbDevice
+                                    var dev = new LinuxUsbDevice
                                     {
                                         DevicePath = dev_path,
                                         VendorId = idVendor,
@@ -93,8 +93,18 @@ public class LinuxUsbFinder
                                         iSerialNumber = iSerialNumber,
                                         UsbDeviceType = UsbDeviceType.Linux,
                                         SerialNumber = iSerialNumber == 0 ? null : "UNKNOWN"
-                                    });
-                                    close(fd);
+                                    };
+
+                                    // Keep platform backends consistent: only return devices that are ready for I/O.
+                                    if (dev.CreateHandle() == 0)
+                                    {
+                                        devices.Add(dev);
+                                    }
+                                    else
+                                    {
+                                        dev.Dispose();
+                                    }
+
                                     break;
                                 }
                             }

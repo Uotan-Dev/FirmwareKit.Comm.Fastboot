@@ -1,14 +1,14 @@
-using FirmwareKit.Comm.Fastboot.Backend.Usb.libusbdotnet;
-using FirmwareKit.Comm.Fastboot.Backend.Usb.Linux;
-using FirmwareKit.Comm.Fastboot.Backend.Usb.macOS;
-using FirmwareKit.Comm.Fastboot.Backend.Usb.Windows;
+using FirmwareKit.Comm.Fastboot.Usb.libusbdotnet;
+using FirmwareKit.Comm.Fastboot.Usb.Linux;
+using FirmwareKit.Comm.Fastboot.Usb.macOS;
+using FirmwareKit.Comm.Fastboot.Usb.Windows;
 using System.Runtime.InteropServices;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb;
+namespace FirmwareKit.Comm.Fastboot.Usb;
 
 public static class UsbManager
 {
-    public static bool ForceLibUsb { get; set; } = false;
+    public static bool ForceLibUsb { get; set; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
     public static List<UsbDevice> GetAllDevices()
     {

@@ -1,8 +1,8 @@
-using FirmwareKit.Comm.Fastboot.Utils;
+
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FirmwareKit.Comm.Fastboot.DataModel;
+namespace FirmwareKit.Comm.Fastboot;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV0

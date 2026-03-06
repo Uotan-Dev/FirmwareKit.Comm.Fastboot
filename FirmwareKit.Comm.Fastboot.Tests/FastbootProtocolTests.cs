@@ -1,8 +1,5 @@
-using FirmwareKit.Comm.Fastboot.Backend.Usb;
-using FirmwareKit.Comm.Fastboot.DataModel;
-using System.Text;
-using FirmwareKit.Comm.Fastboot.Backend.Network;
 using System.Globalization;
+using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

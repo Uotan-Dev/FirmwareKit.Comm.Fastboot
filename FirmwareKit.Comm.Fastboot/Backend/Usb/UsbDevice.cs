@@ -1,6 +1,6 @@
-using FirmwareKit.Comm.Fastboot.Backend.Network;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb;
+
+namespace FirmwareKit.Comm.Fastboot.Usb;
 
 public abstract class UsbDevice : IFastbootTransport
 {

@@ -1,11 +1,12 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     public FastbootResponse SetActiveSlot(string slot)
     {
+        NotifyCurrentStep($"Setting current slot to '{slot}'");
         var res = RawCommand("set_active:" + slot);
         if (res.Result == FastbootState.Success)
         {

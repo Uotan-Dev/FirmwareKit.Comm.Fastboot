@@ -1,5 +1,3 @@
-using FirmwareKit.Comm.Fastboot.Backend.Network;
-using FirmwareKit.Comm.Fastboot.DataModel;
 using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.Tests

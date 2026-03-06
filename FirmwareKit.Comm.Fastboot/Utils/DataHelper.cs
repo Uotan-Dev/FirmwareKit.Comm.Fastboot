@@ -1,7 +1,7 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
-namespace FirmwareKit.Comm.Fastboot.Utils;
+namespace FirmwareKit.Comm.Fastboot;
 
 internal class DataHelper
 {

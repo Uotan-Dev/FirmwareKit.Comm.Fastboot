@@ -1,10 +1,10 @@
-using FirmwareKit.Comm.Fastboot.Utils;
+
 using System.IO.Compression;
 
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     private ProductInfoParser _productParser => new(this);
 
@@ -43,11 +43,28 @@ public partial class FastbootUtil
                 throw new Exception("Incompatible device: " + error);
             }
         }
+
+        string slotSuffix = "";
+        try { slotSuffix = GetVar("slot-suffix"); } catch { }
+
+        string[] firmwareImages = { "bootloader", "radio" };
+        foreach (var p in firmwareImages)
+        {
+            string img = Path.Combine(androidProductOut, p + ".img");
+            if (File.Exists(img))
+            {
+                NotifyCurrentStep($"Flashing {p}...");
+                using var fs = File.OpenRead(img);
+                FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+            }
+        }
+
         string superEmpty = Path.Combine(androidProductOut, "super_empty.img");
         if (File.Exists(superEmpty))
         {
             FlashDynamicPartitions(androidProductOut, superEmpty);
         }
+
         string[] standardImages = {
             "boot", "init_boot", "vendor_boot", "dtbo", "pvmfw",
             "vbmeta", "vbmeta_system", "vbmeta_vendor", "recovery",
@@ -71,24 +88,47 @@ public partial class FastbootUtil
     private void FlashDynamicPartitions(string directory, string superEmptyPath)
     {
         NotifyCurrentStep("Flashing dynamic partitions...");
-        var helper = new SuperFlashHelper(this, "super", superEmptyPath);
 
         string[] dynamicPartitions = { "system", "vendor", "product", "system_ext", "odm", "vendor_dlkm", "odm_dlkm" };
-
-        bool addedAny = false;
+        bool hasAnyImage = false;
         foreach (var p in dynamicPartitions)
         {
-            string img = Path.Combine(directory, p + ".img");
-            if (File.Exists(img))
+            if (File.Exists(Path.Combine(directory, p + ".img")))
             {
-                helper.AddPartition(p, img);
-                addedAny = true;
+                hasAnyImage = true;
+                break;
             }
         }
 
-        if (addedAny)
+        if (!hasAnyImage) return;
+
+        try
         {
+            var helper = new SuperFlashHelper(this, "super", superEmptyPath);
+            foreach (var p in dynamicPartitions)
+            {
+                string img = Path.Combine(directory, p + ".img");
+                if (File.Exists(img))
+                {
+                    helper.AddPartition(p, img);
+                }
+            }
             helper.Flash();
+        }
+        catch (Exception ex)
+        {
+            NotifyCurrentStep($"Warning: Optimized super flash failed ({ex.Message}). Falling back to individual partition flashing...");
+            // Individual fallback
+            foreach (var p in dynamicPartitions)
+            {
+                string img = Path.Combine(directory, p + ".img");
+                if (File.Exists(img))
+                {
+                    string target = p + (GetVar("slot-suffix") ?? "");
+                    using var fs = File.OpenRead(img);
+                    FlashUnsparseImage(target, fs, fs.Length).ThrowIfError();
+                }
+            }
         }
     }
 }

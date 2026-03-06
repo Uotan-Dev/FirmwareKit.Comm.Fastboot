@@ -1,9 +1,9 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using static FirmwareKit.Comm.Fastboot.Backend.Usb.Windows.Win32API;
-using static FirmwareKit.Comm.Fastboot.Backend.Usb.Windows.WinUSBAPI;
+using static FirmwareKit.Comm.Fastboot.Usb.Windows.WinUSBAPI;
+using static FirmwareKit.Comm.Fastboot.Usb.Windows.Win32API;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Windows;
+namespace FirmwareKit.Comm.Fastboot.Usb.Windows;
 
 public class WinUSBDevice : UsbDevice
 {
@@ -12,9 +12,9 @@ public class WinUSBDevice : UsbDevice
     private byte ReadBulkIndex, WriteBulkIndex;
     private IntPtr WinUSBHandle;
     private IntPtr FileHandle;
-    private USBDeviceDescriptor USBDeviceDescriptor;
-    private USBDeviceConfigDescriptor USBDeviceConfigDescriptor;
-    private USBDeviceInterfaceDescriptor USBDeviceInterfaceDescriptor;
+    private Win32API.USBDeviceDescriptor USBDeviceDescriptor;
+    private Win32API.USBDeviceConfigDescriptor USBDeviceConfigDescriptor;
+    private Win32API.USBDeviceInterfaceDescriptor USBDeviceInterfaceDescriptor;
 
     public override int CreateHandle()
     {

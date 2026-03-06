@@ -1,8 +1,8 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     /// <summary>
     /// Executes legacy upload command, returning device image or log (like upload:last_kmsg)

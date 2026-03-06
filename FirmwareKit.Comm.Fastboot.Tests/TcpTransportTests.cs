@@ -1,4 +1,3 @@
-using FirmwareKit.Comm.Fastboot.Backend.Network;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;

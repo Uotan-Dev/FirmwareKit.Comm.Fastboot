@@ -1,15 +1,15 @@
 using FirmwareKit.Lp;
 using FirmwareKit.Sparse.Core;
 
-namespace FirmwareKit.Comm.Fastboot.Utils;
+namespace FirmwareKit.Comm.Fastboot;
 
-internal class SuperFlashHelper(FastbootUtil fastboot, string mainPartition = "super", string? emptyImagePath = null)
+internal class SuperFlashHelper(FastbootDriver fastboot, string mainPartition = "super", string? emptyImagePath = null)
 {
-    private FastbootUtil _fastboot = fastboot;
+    private FastbootDriver _fastboot = fastboot;
     private SuperImageBuilder _builder = InitializeBuilder(fastboot, mainPartition, emptyImagePath);
     private string _mainPartition = mainPartition;
 
-    private static SuperImageBuilder InitializeBuilder(FastbootUtil fastboot, string mainPartition, string? emptyImagePath)
+    private static SuperImageBuilder InitializeBuilder(FastbootDriver fastboot, string mainPartition, string? emptyImagePath)
     {
         ulong superSize = 0;
 
@@ -33,7 +33,7 @@ internal class SuperFlashHelper(FastbootUtil fastboot, string mainPartition = "s
         }
     }
 
-    private static SuperImageBuilder CreateDefaultBuilder(FastbootUtil fastboot, string mainPartition, ref ulong superSize)
+    private static SuperImageBuilder CreateDefaultBuilder(FastbootDriver fastboot, string mainPartition, ref ulong superSize)
     {
         string sizeStr = fastboot.GetPartitionSize(mainPartition);
         if (!string.IsNullOrEmpty(sizeStr))

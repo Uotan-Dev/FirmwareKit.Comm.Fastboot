@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Text;
-using static FirmwareKit.Comm.Fastboot.Backend.Usb.Linux.LinuxUsbAPI;
+using static FirmwareKit.Comm.Fastboot.Usb.Linux.LinuxUsbAPI;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.Linux;
+namespace FirmwareKit.Comm.Fastboot.Usb.Linux;
 
 public class LinuxUsbDevice : UsbDevice
 {

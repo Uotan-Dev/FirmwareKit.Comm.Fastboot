@@ -1,7 +1,7 @@
 using FirmwareKit.Lp;
 using FirmwareKit.Sparse.Core;
 
-namespace FirmwareKit.Comm.Fastboot.Utils;
+namespace FirmwareKit.Comm.Fastboot;
 
 internal class SuperImageBuilder
 {

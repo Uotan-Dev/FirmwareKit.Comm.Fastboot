@@ -1,5 +1,5 @@
 using FirmwareKit.Comm.Fastboot;
-using FirmwareKit.Comm.Fastboot.Backend.Usb;
+using FirmwareKit.Comm.Fastboot.Usb;
 
 
 namespace FastbootCLI
@@ -44,7 +44,7 @@ namespace FastbootCLI
                     sparseLimit = ParseSize(sizeStr);
                 }
                 else if (arg == "--debug") FastbootDebug.IsEnabled = true;
-                else if (arg == "--libusb") UsbManager.ForceLibUsb = true;
+                else if (arg == "--fallback") UsbManager.ForceLibUsb = false;
                 else if (arg == "--version" || arg == "version") { Console.WriteLine("fastboot version 1.2.5"); return; }
                 else if (arg == "-h" || arg == "--help" || arg == "help") { ShowHelp(); return; }
                 else if (!arg.StartsWith("-"))
@@ -75,7 +75,27 @@ namespace FastbootCLI
             }
 
             var devices = UsbManager.GetAllDevices();
-            UsbDevice? target = serial != null ? devices.FirstOrDefault(d => d.SerialNumber == serial) : (devices.Count > 0 ? devices[0] : null);
+            UsbDevice? target = null;
+
+            if (serial != null)
+            {
+                target = devices.FirstOrDefault(d => d.SerialNumber == serial);
+            }
+            else if (devices.Count > 0)
+            {
+                target = devices[0];
+            }
+            else
+            {
+                // Wait for device matching AOSP behavior
+                Console.Error.WriteLine("< waiting for any device >");
+                while (target == null)
+                {
+                    System.Threading.Thread.Sleep(500);
+                    devices = UsbManager.GetAllDevices();
+                    target = devices.FirstOrDefault();
+                }
+            }
 
             if (target == null)
             {
@@ -83,8 +103,8 @@ namespace FastbootCLI
                 Environment.Exit(1);
             }
 
-            using FastbootUtil util = new FastbootUtil(target);
-            if (sparseLimit.HasValue) FastbootUtil.SparseMaxDownloadSize = (int)Math.Min(int.MaxValue, sparseLimit.Value);
+            using FastbootDriver util = new FastbootDriver(target);
+            if (sparseLimit.HasValue) FastbootDriver.SparseMaxDownloadSize = (int)Math.Min(int.MaxValue, sparseLimit.Value);
 
             util.ReceivedFromDevice += (s, e) =>
             {
@@ -127,7 +147,7 @@ namespace FastbootCLI
             return long.Parse(sizeStr) * multiplier;
         }
 
-        static void ExecuteCommand(FastbootUtil util, string command, List<string> args)
+        static void ExecuteCommand(FastbootDriver util, string command, List<string> args)
         {
             if (command == "devices")
             {
@@ -257,7 +277,6 @@ namespace FastbootCLI
                         using var fs = File.OpenRead(file);
                         util.FlashUnsparseImage(part, fs, fs.Length).ThrowIfError();
                     }
-                    if (!skipReboot && (part.StartsWith("boot") || part.StartsWith("system"))) Console.Error.WriteLine("Note: Device may need a manual reboot or use 'fastboot reboot'.");
                     break;
 
                 case "flashall":
@@ -398,6 +417,7 @@ namespace FastbootCLI
             Console.Error.WriteLine("  --skip-reboot                  Don't reboot device after flashing all.");
             Console.Error.WriteLine("  --force                        Force execute command (e.g. skip snapshot check).");
             Console.Error.WriteLine("  --fs-options <opt>             File system options for format (e.g. casefold).");
+            Console.Error.WriteLine("  --fallback                     Use platform native USB backend instead of libusb (on Linux libusb is default).");
 
             Console.Error.WriteLine("\nbasics:");
             Console.Error.WriteLine("  devices [-l]                   List connected devices.");

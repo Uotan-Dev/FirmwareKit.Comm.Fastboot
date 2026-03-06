@@ -1,9 +1,8 @@
 using System.Buffers.Binary;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Network;
+namespace FirmwareKit.Comm.Fastboot.Network;
 
 public class TcpTransport : IFastbootTransport
 {

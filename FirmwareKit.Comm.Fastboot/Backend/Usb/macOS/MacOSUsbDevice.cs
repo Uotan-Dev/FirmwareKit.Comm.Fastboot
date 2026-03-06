@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using static FirmwareKit.Comm.Fastboot.Backend.Usb.macOS.MacOSUsbAPI;
+using static FirmwareKit.Comm.Fastboot.Usb.macOS.MacOSUsbAPI;
 
-namespace FirmwareKit.Comm.Fastboot.Backend.Usb.macOS;
+namespace FirmwareKit.Comm.Fastboot.Usb.macOS;
 
 public class MacOSUsbDevice : UsbDevice
 {

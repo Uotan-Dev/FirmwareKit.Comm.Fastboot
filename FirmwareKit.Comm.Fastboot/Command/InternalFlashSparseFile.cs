@@ -1,9 +1,9 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 using FirmwareKit.Sparse.Core;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     /// <summary>
     /// Flashes sparse file object

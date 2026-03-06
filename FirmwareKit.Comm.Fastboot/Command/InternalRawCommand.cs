@@ -1,9 +1,9 @@
-using FirmwareKit.Comm.Fastboot.DataModel;
+
 using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
-public partial class FastbootUtil
+public partial class FastbootDriver
 {
     /// <summary>
     /// Sends the command

@@ -1,4 +1,4 @@
-﻿namespace FirmwareKit.Comm.Fastboot.Utils;
+namespace FirmwareKit.Comm.Fastboot;
 
 internal static class FileSystemUtil
 {
