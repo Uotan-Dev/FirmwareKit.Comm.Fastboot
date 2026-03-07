@@ -7,7 +7,7 @@ namespace FirmwareKit.Comm.Fastboot.Network;
 /// Fastboot over UDP Transport
 /// Fully implements the AOSP Fastboot over Network protocol (headers, sequence numbers, handshake)
 /// </summary>
-public class UdpTransport : IFastbootTransport
+public class UdpTransport : IFastbootBufferedTransport
 {
     private readonly UdpClient _client;
     private readonly IPEndPoint _endpoint;
@@ -55,13 +55,18 @@ public class UdpTransport : IFastbootTransport
         _client.Client.ReceiveTimeout = _timeoutMs;
         _client.Client.SendTimeout = _timeoutMs;
 
-        byte[] response = SendSinglePacket(PacketId.DeviceQuery, 0, PacketFlag.None, [], 0, 0, _maxTransmissionAttempts, out _);
+        // Handshake runs at transport creation and is sensitive to scheduling jitter
+        // in constrained CI environments. Use a slightly larger retry budget here
+        // without changing steady-state transfer behavior.
+        int initAttempts = Math.Max(_maxTransmissionAttempts, 5);
+
+        byte[] response = SendSinglePacket(PacketId.DeviceQuery, 0, PacketFlag.None, [], 0, 0, initAttempts, out _);
         if (response.Length < 2) throw new Exception("Invalid query response from target.");
         _sequence = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(0, 2));
         byte[] initData = new byte[4];
         BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(0, 2), 0x0001);
         BinaryPrimitives.WriteUInt16BigEndian(initData.AsSpan(2, 2), HostMaxPacketSize);
-        response = SendSinglePacket(PacketId.Initialization, (ushort)_sequence, PacketFlag.None, initData, initData.Length, _maxTransmissionAttempts, out _);
+        response = SendSinglePacket(PacketId.Initialization, (ushort)_sequence, PacketFlag.None, initData, initData.Length, initAttempts, out _);
         if (response.Length < 4) throw new Exception("Invalid initialization response from target.");
 
         ushort version = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(0, 2));
@@ -187,12 +192,31 @@ public class UdpTransport : IFastbootTransport
     public byte[] Read(int length)
     {
         if (length <= 0) return Array.Empty<byte>();
+        byte[] buffer = new byte[length];
+        int read = ReadInto(buffer, 0, length);
+        if (read < length)
+        {
+            Array.Resize(ref buffer, read);
+        }
+        return buffer;
+    }
+
+    public int ReadInto(byte[] buffer, int offset, int length)
+    {
+        if (length <= 0) return 0;
+        if (offset < 0 || length < 0 || offset + length > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+
         byte[] response = SendDataInternal(PacketId.Fastboot, [], 0, _maxTransmissionAttempts);
         if (response.Length > length)
         {
             throw new Exception("UDP protocol error: receive overflow, target sent too much fastboot data.");
         }
-        return response;
+
+        Buffer.BlockCopy(response, 0, buffer, offset, response.Length);
+        return response.Length;
     }
 
     public long Write(byte[] data, int length)

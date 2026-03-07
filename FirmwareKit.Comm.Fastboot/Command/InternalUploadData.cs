@@ -1,5 +1,7 @@
 
 
+using System.Buffers;
+
 namespace FirmwareKit.Comm.Fastboot;
 
 public partial class FastbootDriver
@@ -15,14 +17,42 @@ public partial class FastbootDriver
 
         long size = response.DataSize;
         long bytesDownloaded = 0;
-        while (bytesDownloaded < size)
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(OnceSendDataSize);
+        try
         {
-            int toRead = (int)Math.Min(OnceSendDataSize, size - bytesDownloaded);
-            byte[] data = Transport.Read(toRead);
-            if (data == null || data.Length == 0) throw new Exception("Unexpected EOF from USB.");
-            output.Write(data, 0, data.Length);
-            bytesDownloaded += data.Length;
-            NotifyProgress(bytesDownloaded, size);
+            while (bytesDownloaded < size)
+            {
+                int toRead = (int)Math.Min(OnceSendDataSize, size - bytesDownloaded);
+                int readLen;
+
+                if (Transport is IFastbootBufferedTransport buffered)
+                {
+                    readLen = buffered.ReadInto(buffer, 0, toRead);
+                }
+                else
+                {
+                    byte[] data = Transport.Read(toRead);
+                    if (data != null && data.Length > 0)
+                    {
+                        readLen = data.Length;
+                        Buffer.BlockCopy(data, 0, buffer, 0, readLen);
+                    }
+                    else
+                    {
+                        readLen = 0;
+                    }
+                }
+
+                if (readLen <= 0) throw new Exception("Unexpected EOF from USB.");
+
+                output.Write(buffer, 0, readLen);
+                bytesDownloaded += readLen;
+                NotifyProgress(bytesDownloaded, size);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         return HandleResponse();

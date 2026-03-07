@@ -4,7 +4,7 @@ using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.Network;
 
-public class TcpTransport : IFastbootTransport
+public class TcpTransport : IFastbootBufferedTransport
 {
     private const int DefaultIoTimeoutMs = 30000;
     private readonly TcpClient _client = new();
@@ -75,6 +75,25 @@ public class TcpTransport : IFastbootTransport
 
     public byte[] Read(int length)
     {
+        if (length <= 0) return Array.Empty<byte>();
+
+        byte[] dataBuffer = new byte[length];
+        int actuallyRead = ReadInto(dataBuffer, 0, length);
+        if (actuallyRead < length)
+        {
+            Array.Resize(ref dataBuffer, actuallyRead);
+        }
+        return dataBuffer;
+    }
+
+    public int ReadInto(byte[] buffer, int offset, int length)
+    {
+        if (length <= 0) return 0;
+        if (offset < 0 || length < 0 || offset + length > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+
         if (_messageBytesLeft == 0)
         {
             byte[] lenBuffer = new byte[8];
@@ -86,14 +105,9 @@ public class TcpTransport : IFastbootTransport
         }
 
         int toRead = (int)Math.Min(length, _messageBytesLeft);
-        byte[] dataBuffer = new byte[toRead];
-        int actuallyRead = ReadFully(dataBuffer, 0, toRead);
-        if (actuallyRead < toRead)
-        {
-            Array.Resize(ref dataBuffer, actuallyRead);
-        }
+        int actuallyRead = ReadFully(buffer, offset, toRead);
         _messageBytesLeft -= actuallyRead;
-        return dataBuffer;
+        return actuallyRead;
     }
 
     public long Write(byte[] data, int length)
