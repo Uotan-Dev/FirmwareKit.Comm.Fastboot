@@ -8,6 +8,7 @@ public class TcpTransport : IFastbootBufferedTransport
 {
     private const int DefaultIoTimeoutMs = 30000;
     private readonly TcpClient _client = new();
+    private readonly object _ioLock = new();
     private readonly byte[] _readLenBuffer = new byte[8];
     private readonly byte[] _writeLenBuffer = new byte[8];
     private NetworkStream? _stream;
@@ -96,30 +97,36 @@ public class TcpTransport : IFastbootBufferedTransport
             throw new ArgumentOutOfRangeException(nameof(length));
         }
 
-        if (_messageBytesLeft == 0)
+        lock (_ioLock)
         {
-            if (ReadFully(_readLenBuffer, 0, 8) != 8)
+            if (_messageBytesLeft == 0)
             {
-                throw new Exception("Failed to read message length from TCP stream.");
+                if (ReadFully(_readLenBuffer, 0, 8) != 8)
+                {
+                    throw new Exception("Failed to read message length from TCP stream.");
+                }
+                _messageBytesLeft = BinaryPrimitives.ReadInt64BigEndian(_readLenBuffer);
             }
-            _messageBytesLeft = BinaryPrimitives.ReadInt64BigEndian(_readLenBuffer);
-        }
 
-        int toRead = (int)Math.Min(length, _messageBytesLeft);
-        int actuallyRead = ReadFully(buffer, offset, toRead);
-        _messageBytesLeft -= actuallyRead;
-        return actuallyRead;
+            int toRead = (int)Math.Min(length, _messageBytesLeft);
+            int actuallyRead = ReadFully(buffer, offset, toRead);
+            _messageBytesLeft -= actuallyRead;
+            return actuallyRead;
+        }
     }
 
     public long Write(byte[] data, int length)
     {
         if (_stream == null) throw new InvalidOperationException("Stream not initialized");
-        BinaryPrimitives.WriteInt64BigEndian(_writeLenBuffer, length);
+        lock (_ioLock)
+        {
+            BinaryPrimitives.WriteInt64BigEndian(_writeLenBuffer, length);
 
-        _stream.Write(_writeLenBuffer, 0, 8);
-        _stream.Write(data, 0, length);
-        _stream.Flush();
-        return length;
+            _stream.Write(_writeLenBuffer, 0, 8);
+            _stream.Write(data, 0, length);
+            _stream.Flush();
+            return length;
+        }
     }
 
     public void Dispose()

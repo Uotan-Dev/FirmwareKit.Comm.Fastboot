@@ -572,7 +572,7 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Flashes image from stream
+    /// Flashes image from stream (Updated to remove sparse handling)
     /// </summary>
     public void FlashImage(string partition, Stream stream)
     {
@@ -589,32 +589,15 @@ public partial class FastbootDriver : IDisposable
             try { ResizeLogicalPartition(targetPartition, 0); } catch { }
         }
 
-        long oldPos = -1;
-        if (stream.CanSeek) oldPos = stream.Position;
-
         try
         {
-            byte[] headerBytes = new byte[SparseFormat.SparseHeaderSize];
-            ReadStreamFully(stream, headerBytes, (int)SparseFormat.SparseHeaderSize);
-            var header = SparseHeader.FromBytes(headerBytes);
-            if (header.Magic == SparseFormat.SparseHeaderMagic)
-            {
-                if (stream.CanSeek && oldPos >= 0) stream.Position = oldPos;
-                // Streaming optimization: Use SparseFile directly from stream
-                using var sfile = SparseFile.FromStream(stream);
-                FlashSparseFile(targetPartition, sfile, GetMaxDownloadSize());
-                return;
-            }
-            else
-            {
-                if (stream.CanSeek && oldPos >= 0) stream.Position = oldPos;
-                FlashUnsparseImage(targetPartition, stream, stream.Length);
-            }
-        }
-        catch
-        {
-            if (stream.CanSeek && oldPos != -1) stream.Position = oldPos;
+            // Directly flash the image without sparse handling
             FlashUnsparseImage(targetPartition, stream, stream.Length);
+        }
+        catch (Exception ex)
+        {
+            FastbootDebug.Log($"[ERROR] FlashImage failed: {ex.Message}");
+            throw;
         }
     }
 

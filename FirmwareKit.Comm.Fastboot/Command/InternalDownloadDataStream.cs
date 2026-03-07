@@ -13,19 +13,35 @@ public partial class FastbootDriver
     {
         const int MaxRetries = 3;
         int retryCount = 0;
+        bool canRetrySafely = stream.CanSeek;
+        long initialPosition = 0;
+
+        if (canRetrySafely)
+        {
+            initialPosition = stream.Position;
+        }
 
         while (retryCount <= MaxRetries)
         {
             try
             {
                 // Reset stream to start for each full-transfer attempt
-                if (stream.CanSeek)
-                    stream.Seek(0, SeekOrigin.Begin);
+                if (canRetrySafely)
+                    stream.Seek(initialPosition, SeekOrigin.Begin);
 
                 return DownloadDataInternal(stream, length, onEvent);
             }
             catch (Exception ex)
             {
+                if (!canRetrySafely)
+                {
+                    return new FastbootResponse
+                    {
+                        Result = FastbootState.Fail,
+                        Response = "download failed on non-seekable stream (retry disabled): " + ex.Message
+                    };
+                }
+
                 retryCount++;
                 if (retryCount > MaxRetries)
                 {

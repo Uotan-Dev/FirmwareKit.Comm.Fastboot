@@ -129,6 +129,96 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             public void Dispose() { }
         }
 
+        private sealed class RetryAwareDownloadCaptureTransport : IFastbootTransport
+        {
+            private readonly Queue<byte[]> _readQueue = new();
+            private int _pendingDownloadBytes;
+            private bool _failedFirstPayloadWrite;
+
+            public MemoryStream DownloadPayload { get; } = new();
+
+            public RetryAwareDownloadCaptureTransport(bool failFirstPayloadWrite)
+            {
+                _failedFirstPayloadWrite = failFirstPayloadWrite;
+            }
+
+            public byte[] Read(int length)
+            {
+                if (_readQueue.Count == 0)
+                {
+                    return Array.Empty<byte>();
+                }
+                return _readQueue.Dequeue();
+            }
+
+            public long Write(byte[] data, int length)
+            {
+                string command = Encoding.UTF8.GetString(data, 0, length);
+                if (command.Equals("getvar:has-crc", StringComparison.OrdinalIgnoreCase))
+                {
+                    _readQueue.Enqueue(Encoding.UTF8.GetBytes("OKAYno"));
+                    return length;
+                }
+
+                if (command.StartsWith("download:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string hex = command.Substring("download:".Length);
+                    int size = int.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                    _pendingDownloadBytes = size;
+                    _readQueue.Enqueue(Encoding.UTF8.GetBytes($"DATA{size:x8}"));
+                    return length;
+                }
+
+                if (_pendingDownloadBytes > 0)
+                {
+                    if (_failedFirstPayloadWrite)
+                    {
+                        _failedFirstPayloadWrite = false;
+                        return Math.Max(0, length - 1);
+                    }
+
+                    DownloadPayload.Write(data, 0, length);
+                    _pendingDownloadBytes -= length;
+                    if (_pendingDownloadBytes <= 0)
+                    {
+                        _readQueue.Enqueue(Encoding.UTF8.GetBytes("OKAY"));
+                    }
+                    return length;
+                }
+
+                _readQueue.Enqueue(Encoding.UTF8.GetBytes("OKAY"));
+                return length;
+            }
+
+            public void Dispose() { }
+        }
+
+        private sealed class NonSeekableStream : Stream
+        {
+            private readonly Stream _inner;
+
+            public NonSeekableStream(Stream inner)
+            {
+                _inner = inner;
+            }
+
+            public override bool CanRead => _inner.CanRead;
+            public override bool CanSeek => false;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => throw new NotSupportedException();
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => _inner.SetLength(value);
+            public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+        }
+
         [Fact]
         public void HandleResponse_Success_ReturnsOkay()
         {
@@ -300,6 +390,37 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Assert.Equal(FastbootState.Fail, response.Result);
             Assert.Contains("download size mismatch", response.Response);
             Assert.DoesNotContain("Short write", response.Response);
+        }
+
+        [Fact]
+        public void DownloadDataStream_Retry_UsesInitialStreamPosition()
+        {
+            var transport = new RetryAwareDownloadCaptureTransport(failFirstPayloadWrite: true);
+            var util = new FastbootDriver(transport);
+
+            byte[] source = new byte[] { 0xAA, 0xBB, 0x01, 0x02, 0x03, 0x04 };
+            using var stream = new MemoryStream(source);
+            stream.Position = 2;
+
+            var response = util.DownloadData(stream, 4);
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Equal(new byte[] { 0x01, 0x02, 0x03, 0x04 }, transport.DownloadPayload.ToArray());
+        }
+
+        [Fact]
+        public void DownloadDataStream_NonSeekable_DoesNotRetry()
+        {
+            var transport = new RetryAwareDownloadCaptureTransport(failFirstPayloadWrite: true);
+            var util = new FastbootDriver(transport);
+
+            using var baseStream = new MemoryStream(new byte[] { 0x01, 0x02, 0x03, 0x04 });
+            using var nonSeek = new NonSeekableStream(baseStream);
+
+            var response = util.DownloadData(nonSeek, 4);
+
+            Assert.Equal(FastbootState.Fail, response.Result);
+            Assert.Contains("non-seekable stream", response.Response);
         }
 
         [Fact]

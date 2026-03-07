@@ -107,86 +107,25 @@ public class UdpTransport : IFastbootBufferedTransport
 
     private byte[] SendSinglePacket(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txOffset, int txLen, int attempts, out ushort nextSeq)
     {
-        PacketId currentId = id;
-        PacketFlag currentFlag = flag;
-        int currentTxOffset = txOffset;
-        int currentTxLen = txLen;
-        ushort currentSeq = seq;
         List<byte> fullResponse = [];
 
-        while (true)
-        {
-            byte[] packet = new byte[HeaderSize + currentTxLen];
-            packet[0] = (byte)currentId;
-            packet[1] = (byte)currentFlag;
-            BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2, 2), currentSeq);
-            if (currentTxLen > 0) Array.Copy(txData, currentTxOffset, packet, HeaderSize, currentTxLen);
+        ExchangePacketSequence(
+            id,
+            flag,
+            seq,
+            txData,
+            txOffset,
+            txLen,
+            attempts,
+            fullResponse,
+            requireEmptyPayload: false,
+            output: null,
+            outputOffset: 0,
+            outputLength: 0,
+            out nextSeq,
+            out _);
 
-            bool gotValidResponse = false;
-            for (int i = 0; i < attempts; i++)
-            {
-                _client.Send(packet, packet.Length, _endpoint);
-
-                try
-                {
-                    while (true)
-                    {
-                        IPEndPoint from = new(IPAddress.Any, 0);
-                        byte[] rxPacket = _client.Receive(ref from);
-                        if (rxPacket.Length < HeaderSize) continue;
-
-                        ushort responseSeq = BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2));
-                        byte responseId = rxPacket[0];
-                        if (responseSeq != currentSeq) continue;
-                        if (responseId != (byte)currentId && responseId != (byte)PacketId.Error) continue;
-
-                        if (responseId == (byte)PacketId.Error)
-                        {
-                            throw new Exception("Target returned error response.");
-                        }
-
-                        if (rxPacket.Length > HeaderSize)
-                        {
-                            for (int j = HeaderSize; j < rxPacket.Length; j++)
-                            {
-                                fullResponse.Add(rxPacket[j]);
-                            }
-                        }
-
-                        gotValidResponse = true;
-                        currentSeq = (ushort)((currentSeq + 1) & 0xFFFF);
-
-                        bool continuation = (rxPacket[1] & (byte)PacketFlag.Continuation) != 0;
-                        if (!continuation)
-                        {
-                            nextSeq = currentSeq;
-                            return fullResponse.ToArray();
-                        }
-
-                        // Prompt the target for the next continuation fragment.
-                        currentId = (PacketId)responseId;
-                        currentFlag = PacketFlag.None;
-                        currentTxOffset = 0;
-                        currentTxLen = 0;
-                        break;
-                    }
-                }
-                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
-                {
-                    continue;
-                }
-
-                if (gotValidResponse)
-                {
-                    break;
-                }
-            }
-
-            if (!gotValidResponse)
-            {
-                throw new Exception($"Failed to receive response after {attempts} attempts.");
-            }
-        }
+        return fullResponse.ToArray();
     }
 
     public byte[] Read(int length)
@@ -216,85 +155,23 @@ public class UdpTransport : IFastbootBufferedTransport
 
     private int ReceiveFastbootInto(byte[] output, int outputOffset, int outputLength, int attempts, out ushort nextSeq)
     {
-        PacketId currentId = PacketId.Fastboot;
-        PacketFlag currentFlag = PacketFlag.None;
-        ushort currentSeq = (ushort)_sequence;
-        int written = 0;
+        ExchangePacketSequence(
+            PacketId.Fastboot,
+            PacketFlag.None,
+            (ushort)_sequence,
+            Array.Empty<byte>(),
+            0,
+            0,
+            attempts,
+            collector: null,
+            requireEmptyPayload: false,
+            output,
+            outputOffset,
+            outputLength,
+            out nextSeq,
+            out int written);
 
-        while (true)
-        {
-            byte[] packet = new byte[HeaderSize];
-            packet[0] = (byte)currentId;
-            packet[1] = (byte)currentFlag;
-            BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2, 2), currentSeq);
-
-            bool gotValidResponse = false;
-            for (int i = 0; i < attempts; i++)
-            {
-                _client.Send(packet, packet.Length, _endpoint);
-
-                try
-                {
-                    while (true)
-                    {
-                        IPEndPoint from = new(IPAddress.Any, 0);
-                        byte[] rxPacket = _client.Receive(ref from);
-                        if (rxPacket.Length < HeaderSize) continue;
-
-                        ushort responseSeq = BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2));
-                        byte responseId = rxPacket[0];
-                        if (responseSeq != currentSeq) continue;
-                        if (responseId != (byte)currentId && responseId != (byte)PacketId.Error) continue;
-
-                        if (responseId == (byte)PacketId.Error)
-                        {
-                            throw new Exception("Target returned error response.");
-                        }
-
-                        int payloadLen = rxPacket.Length - HeaderSize;
-                        if (payloadLen > 0)
-                        {
-                            if (written + payloadLen > outputLength)
-                            {
-                                throw new Exception("UDP protocol error: receive overflow, target sent too much fastboot data.");
-                            }
-
-                            Buffer.BlockCopy(rxPacket, HeaderSize, output, outputOffset + written, payloadLen);
-                            written += payloadLen;
-                        }
-
-                        gotValidResponse = true;
-                        currentSeq = (ushort)((currentSeq + 1) & 0xFFFF);
-
-                        bool continuation = (rxPacket[1] & (byte)PacketFlag.Continuation) != 0;
-                        if (!continuation)
-                        {
-                            nextSeq = currentSeq;
-                            return written;
-                        }
-
-                        // Prompt the target for the next continuation fragment.
-                        currentId = (PacketId)responseId;
-                        currentFlag = PacketFlag.None;
-                        break;
-                    }
-                }
-                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
-                {
-                    continue;
-                }
-
-                if (gotValidResponse)
-                {
-                    break;
-                }
-            }
-
-            if (!gotValidResponse)
-            {
-                throw new Exception($"Failed to receive response after {attempts} attempts.");
-            }
-        }
+        return written;
     }
 
     public long Write(byte[] data, int length)
@@ -321,11 +198,45 @@ public class UdpTransport : IFastbootBufferedTransport
 
     private void SendSinglePacketNoPayload(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txOffset, int txLen, int attempts, out ushort nextSeq)
     {
+        ExchangePacketSequence(
+            id,
+            flag,
+            seq,
+            txData,
+            txOffset,
+            txLen,
+            attempts,
+            collector: null,
+            requireEmptyPayload: true,
+            output: null,
+            outputOffset: 0,
+            outputLength: 0,
+            out nextSeq,
+            out _);
+    }
+
+    private void ExchangePacketSequence(
+        PacketId id,
+        PacketFlag flag,
+        ushort seq,
+        byte[] txData,
+        int txOffset,
+        int txLen,
+        int attempts,
+        List<byte>? collector,
+        bool requireEmptyPayload,
+        byte[]? output,
+        int outputOffset,
+        int outputLength,
+        out ushort nextSeq,
+        out int written)
+    {
         PacketId currentId = id;
         PacketFlag currentFlag = flag;
         int currentTxOffset = txOffset;
         int currentTxLen = txLen;
         ushort currentSeq = seq;
+        written = 0;
 
         while (true)
         {
@@ -358,9 +269,31 @@ public class UdpTransport : IFastbootBufferedTransport
                             throw new Exception("Target returned error response.");
                         }
 
-                        if (rxPacket.Length > HeaderSize)
+                        int payloadLen = rxPacket.Length - HeaderSize;
+                        if (payloadLen > 0)
                         {
-                            throw new Exception("UDP protocol error: target sent fastboot data out-of-turn.");
+                            if (requireEmptyPayload)
+                            {
+                                throw new Exception("UDP protocol error: target sent fastboot data out-of-turn.");
+                            }
+
+                            if (output != null)
+                            {
+                                if (written + payloadLen > outputLength)
+                                {
+                                    throw new Exception("UDP protocol error: receive overflow, target sent too much fastboot data.");
+                                }
+
+                                Buffer.BlockCopy(rxPacket, HeaderSize, output, outputOffset + written, payloadLen);
+                                written += payloadLen;
+                            }
+                            else if (collector != null)
+                            {
+                                for (int j = HeaderSize; j < rxPacket.Length; j++)
+                                {
+                                    collector.Add(rxPacket[j]);
+                                }
+                            }
                         }
 
                         gotValidResponse = true;
