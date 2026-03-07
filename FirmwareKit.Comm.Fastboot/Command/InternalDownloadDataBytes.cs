@@ -21,17 +21,25 @@ public partial class FastbootDriver
         FastbootResponse response = RawCommand("download:" + data.Length.ToString("x8"));
         if (response.Result != FastbootState.Data)
             return response;
+        if (response.DataSize != data.Length)
+        {
+            return new FastbootResponse
+            {
+                Result = FastbootState.Fail,
+                Response = $"download size mismatch: requested {data.Length}, device accepted {response.DataSize}"
+            };
+        }
 
         long bytesWritten = 0;
         int length = data.Length;
+        byte[] transferBuffer = new byte[Math.Min(OnceSendDataSize, length)];
 
         while (bytesWritten < length)
         {
             int toWrite = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
-            byte[] chunk = new byte[toWrite];
-            Array.Copy(data, bytesWritten, chunk, 0, toWrite);
+            Buffer.BlockCopy(data, (int)bytesWritten, transferBuffer, 0, toWrite);
 
-            long written = Transport.Write(chunk, toWrite);
+            long written = Transport.Write(transferBuffer, toWrite);
             if (written != toWrite)
             {
                 return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{toWrite}" };

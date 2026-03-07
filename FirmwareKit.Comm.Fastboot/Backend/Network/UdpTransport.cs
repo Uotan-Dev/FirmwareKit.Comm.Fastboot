@@ -142,7 +142,10 @@ public class UdpTransport : IFastbootTransport
 
                         if (rxPacket.Length > HeaderSize)
                         {
-                            fullResponse.AddRange(rxPacket.AsSpan(HeaderSize).ToArray());
+                            for (int j = HeaderSize; j < rxPacket.Length; j++)
+                            {
+                                fullResponse.Add(rxPacket[j]);
+                            }
                         }
 
                         gotValidResponse = true;

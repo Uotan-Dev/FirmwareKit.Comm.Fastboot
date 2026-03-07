@@ -271,14 +271,35 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         public void DownloadDataStream_PrematureEof_FailsEarly()
         {
             var transport = new MockTransport();
-            transport.EnqueueResponse("DATA00000010");
+            transport.EnqueueResponse("OKAYno");
+            for (int i = 0; i < 4; i++)
+            {
+                transport.EnqueueResponse("DATA00000010");
+            }
             var util = new FastbootDriver(transport);
 
             using var shortStream = new MemoryStream(new byte[4]);
             var response = util.DownloadData(shortStream, 16);
 
             Assert.Equal(FastbootState.Fail, response.Result);
+            Assert.Contains("Max retries exceeded", response.Response);
             Assert.Contains("stream ended early", response.Response);
+        }
+
+        [Fact]
+        public void DownloadDataStream_DataSizeMismatch_Fails()
+        {
+            var transport = new MockTransport();
+            transport.EnqueueResponse("OKAYno");
+            transport.EnqueueResponse("DATA00000004");
+            var util = new FastbootDriver(transport);
+
+            using var stream = new MemoryStream(new byte[8]);
+            var response = util.DownloadData(stream, 8);
+
+            Assert.Equal(FastbootState.Fail, response.Result);
+            Assert.Contains("download size mismatch", response.Response);
+            Assert.DoesNotContain("Short write", response.Response);
         }
 
         [Fact]
@@ -321,6 +342,35 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             Assert.Equal(FastbootState.Fail, response.Result);
             Assert.Contains("Short write", response.Response);
+        }
+
+        [Fact]
+        public void DownloadDataBytes_DataSizeMismatch_Fails()
+        {
+            var transport = new MockTransport();
+            transport.EnqueueResponse("DATA00000004");
+            var util = new FastbootDriver(transport);
+
+            var response = util.DownloadData(new byte[8]);
+
+            Assert.Equal(FastbootState.Fail, response.Result);
+            Assert.Contains("download size mismatch", response.Response);
+        }
+
+        [Fact]
+        public void DownloadDataStream_MalformedCrcResponse_Fails()
+        {
+            var transport = new MockTransport();
+            transport.EnqueueResponse("OKAYyes");
+            transport.EnqueueResponse("DATA00000004");
+            transport.EnqueueResponse("OKAY0xGGGGGGGG");
+            var util = new FastbootDriver(transport);
+
+            using var stream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+            var response = util.DownloadData(stream, 4);
+
+            Assert.Equal(FastbootState.Fail, response.Result);
+            Assert.Contains("invalid CRC response", response.Response);
         }
 
         [Fact]
@@ -397,6 +447,28 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Assert.Contains("download:00000040", transport.Commands);
             Assert.Contains("flash:boot", transport.Commands);
             Assert.Equal(imageBytes, transport.DownloadPayload.ToArray());
+        }
+
+        [Fact]
+        public void FlashUnsparseImage_OversizedRaw_IsConvertedToSparseAndFlashed()
+        {
+            byte[] imageBytes = new byte[128];
+            var transport = new ProtocolDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["getvar:has-slot:boot"] = "OKAYno",
+                ["getvar:is-logical:boot"] = "OKAYno",
+                ["getvar:max-download-size"] = "OKAY0x40",
+                ["flash:boot"] = "OKAY"
+            });
+
+            var util = new FastbootDriver(transport);
+
+            using var stream = new MemoryStream(imageBytes);
+            var response = util.FlashUnsparseImage("boot", stream, stream.Length);
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Contains(transport.Commands, c => c.StartsWith("download:", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("flash:boot", transport.Commands);
         }
     }
 }

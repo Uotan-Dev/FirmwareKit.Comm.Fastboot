@@ -1,5 +1,7 @@
 
 using FirmwareKit.Sparse.Core;
+using FirmwareKit.Sparse.Utils;
+using System.Buffers;
 
 
 namespace FirmwareKit.Comm.Fastboot;
@@ -49,29 +51,81 @@ public partial class FastbootDriver
 
         if (length > maxDownloadSize)
         {
-            FastbootDebug.Log($"Large image detected, splitting RAW: {length} > {maxDownloadSize}");
-            NotifyCurrentStep($"{partition} ({length} bytes) is larger than max-download-size ({maxDownloadSize}). Splitting RAW image...");
-            // Manually split RAW stream into sparse-like chunks for download
-            long bytesWritten = 0;
-            int count = 1;
-            long totalChunks = (length + maxDownloadSize - 1) / maxDownloadSize;
+            NotifyCurrentStep($"{partition} ({length} bytes) exceeds max-download-size ({maxDownloadSize}). Converting RAW image to sparse...");
+            string tempDir = Path.Combine(Path.GetTempPath(), "fastboot_sparse_" + Guid.NewGuid().ToString("N"));
+            string sparsePath = Path.Combine(tempDir, "input.sparse.img");
 
-            while (bytesWritten < length)
+            try
             {
-                long toWrite = Math.Min(maxDownloadSize, length - bytesWritten);
-                NotifyCurrentStep($"Sending {partition} RAW chunk {count}/{totalChunks} ({toWrite} bytes)");
+                Directory.CreateDirectory(tempDir);
 
-                // Create a sub-view of the RAW stream
-                using var subStream = new SubStream(stream, bytesWritten, toWrite);
-                DownloadData(subStream, toWrite).ThrowIfError();
+                string? sourceRawPath = null;
+                bool canUseFileDirectly = stream is FileStream fs &&
+                                          fs.CanSeek &&
+                                          originalPos == 0 &&
+                                          length == fs.Length;
 
-                NotifyCurrentStep($"Flashing {partition} RAW chunk {count}/{totalChunks}");
-                RawCommand("flash:" + partition).ThrowIfError();
+                if (canUseFileDirectly)
+                {
+                    sourceRawPath = ((FileStream)stream).Name;
+                    FastbootDebug.Log($"Converting RAW via direct source file: {sourceRawPath}");
+                }
+                else
+                {
+                    string rawPath = Path.Combine(tempDir, "input.raw");
+                    sourceRawPath = rawPath;
+                    if (stream.CanSeek)
+                    {
+                        stream.Seek(originalPos, SeekOrigin.Begin);
+                    }
 
-                bytesWritten += toWrite;
-                count++;
+                    using var ofs = File.Create(rawPath);
+                    byte[] copyBuffer = ArrayPool<byte>.Shared.Rent(1024 * 1024);
+                    try
+                    {
+                        long remaining = length;
+                        while (remaining > 0)
+                        {
+                            int toRead = (int)Math.Min(copyBuffer.Length, remaining);
+                            int read = stream.Read(copyBuffer, 0, toRead);
+                            if (read <= 0)
+                            {
+                                return new FastbootResponse
+                                {
+                                    Result = FastbootState.Fail,
+                                    Response = $"failed to read source RAW stream while converting to sparse: {length - remaining}/{length}"
+                                };
+                            }
+                            ofs.Write(copyBuffer, 0, read);
+                            remaining -= read;
+                        }
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(copyBuffer);
+                    }
+                }
+
+                SparseImageConverter.ConvertRawToSparse(sourceRawPath!, sparsePath, 4096);
+                NotifyCurrentStep($"Converted RAW image to sparse. Flashing {partition} with sparse protocol...");
+                return FlashSparseImage(partition, sparsePath);
             }
-            return new FastbootResponse { Result = FastbootState.Success };
+            catch (Exception ex)
+            {
+                return new FastbootResponse
+                {
+                    Result = FastbootState.Fail,
+                    Response = "raw-to-sparse conversion failed: " + ex.Message
+                };
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+                if (stream.CanSeek)
+                {
+                    try { stream.Seek(originalPos, SeekOrigin.Begin); } catch { }
+                }
+            }
         }
 
         // AVB Footer logic

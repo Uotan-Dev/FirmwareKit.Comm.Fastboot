@@ -9,6 +9,7 @@ public partial class FastbootDriver
 {
     // AOSP constant for response size
     private const int FB_RESPONSE_SZ = 256;
+    private static readonly char[] ResponseDelimiters = ['\0', '\r', '\n'];
     // AOSP constant for max download size from remote (should match device)
     private const long MAX_DOWNLOAD_SIZE = 1024L * 1024 * 1024 * 4;
 
@@ -21,29 +22,45 @@ public partial class FastbootDriver
         FastbootResponse response = new FastbootResponse();
         DateTime start = DateTime.Now;
         string pendingStatus = string.Empty;
+        StringBuilder? textBuffer = null;
+
+        static bool IsPrefixAt(string s, int index, char a, char b, char c, char d)
+        {
+            return index + 4 <= s.Length &&
+                   s[index] == a &&
+                   s[index + 1] == b &&
+                   s[index + 2] == c &&
+                   s[index + 3] == d;
+        }
 
         static bool IsKnownPrefixAt(string s, int index)
         {
-            if (index + 4 > s.Length) return false;
-            string p = s.Substring(index, 4);
-            return p == "OKAY" || p == "FAIL" || p == "INFO" || p == "TEXT" || p == "DATA";
+            return IsPrefixAt(s, index, 'O', 'K', 'A', 'Y') ||
+                   IsPrefixAt(s, index, 'F', 'A', 'I', 'L') ||
+                   IsPrefixAt(s, index, 'I', 'N', 'F', 'O') ||
+                   IsPrefixAt(s, index, 'T', 'E', 'X', 'T') ||
+                   IsPrefixAt(s, index, 'D', 'A', 'T', 'A');
         }
 
         static int FindInfoTextEnd(string s, int contentStart)
         {
-            int delimiterIdx = s.IndexOfAny(new[] { '\0', '\r', '\n' }, contentStart);
+            int delimiterIdx = s.IndexOfAny(ResponseDelimiters, contentStart);
             if (delimiterIdx >= 0)
             {
                 return delimiterIdx;
             }
 
-            static bool IsTerminalPrefix(string p) => p == "OKAY" || p == "FAIL" || p == "DATA";
+            static bool IsTerminalPrefixAt(string value, int index)
+            {
+                return IsPrefixAt(value, index, 'O', 'K', 'A', 'Y') ||
+                       IsPrefixAt(value, index, 'F', 'A', 'I', 'L') ||
+                       IsPrefixAt(value, index, 'D', 'A', 'T', 'A');
+            }
 
             int firstTerminalIdx = -1;
             for (int i = contentStart + 1; i <= s.Length - 4; i++)
             {
-                string p = s.Substring(i, 4);
-                if (IsTerminalPrefix(p))
+                if (IsTerminalPrefixAt(s, i))
                 {
                     firstTerminalIdx = i;
                     break;
@@ -58,13 +75,14 @@ public partial class FastbootDriver
                 // split properly while still protecting against malformed streams.
                 if (i + 4 <= s.Length)
                 {
-                    string p = s.Substring(i, 4);
-                    if (IsTerminalPrefix(p)) return i;
+                    if (IsTerminalPrefixAt(s, i)) return i;
 
                     // Avoid splitting plain payload text that happens to contain
                     // INFO/TEXT tokens. Only split INFO/TEXT mid-payload when the
                     // packet also contains a terminal status marker later.
-                    if ((p == "INFO" || p == "TEXT") && firstTerminalIdx > i) return i;
+                    bool isInfoAt = IsPrefixAt(s, i, 'I', 'N', 'F', 'O');
+                    bool isTextAt = IsPrefixAt(s, i, 'T', 'E', 'X', 'T');
+                    if ((isInfoAt || isTextAt) && firstTerminalIdx > i) return i;
                 }
             }
 
@@ -129,23 +147,35 @@ public partial class FastbootDriver
                     return response;
                 }
 
-                string prefix = pendingStatus.Substring(0, 4);
+                bool isOkay = IsPrefixAt(pendingStatus, 0, 'O', 'K', 'A', 'Y');
+                bool isFail = IsPrefixAt(pendingStatus, 0, 'F', 'A', 'I', 'L');
+                bool isInfo = IsPrefixAt(pendingStatus, 0, 'I', 'N', 'F', 'O');
+                bool isText = IsPrefixAt(pendingStatus, 0, 'T', 'E', 'X', 'T');
+                bool isData = IsPrefixAt(pendingStatus, 0, 'D', 'A', 'T', 'A');
 
-                if (prefix == "OKAY")
+                if (isOkay)
                 {
                     string content = pendingStatus.Length > 4 ? pendingStatus.Substring(4).TrimEnd('\0') : "";
                     response.Result = FastbootState.Success;
+                    if (textBuffer != null)
+                    {
+                        response.Text = textBuffer.ToString();
+                    }
                     response.Response = content;
                     return response;
                 }
-                else if (prefix == "FAIL")
+                else if (isFail)
                 {
                     string content = pendingStatus.Length > 4 ? pendingStatus.Substring(4).TrimEnd('\0') : "";
                     response.Result = FastbootState.Fail;
+                    if (textBuffer != null)
+                    {
+                        response.Text = textBuffer.ToString();
+                    }
                     response.Response = content;
                     return response;
                 }
-                else if (prefix == "INFO" || prefix == "TEXT")
+                else if (isInfo || isText)
                 {
                     int endIdx = FindInfoTextEnd(pendingStatus, 4);
                     if (endIdx < 0)
@@ -158,14 +188,15 @@ public partial class FastbootDriver
                     }
 
                     string cleanContent = pendingStatus.Substring(4, endIdx - 4);
-                    if (prefix == "INFO")
+                    if (isInfo)
                     {
                         response.Info.Add(cleanContent);
                         NotifyReceived(FastbootState.Info, cleanContent);
                     }
                     else
                     {
-                        response.Text += cleanContent;
+                        textBuffer ??= new StringBuilder();
+                        textBuffer.Append(cleanContent);
                         NotifyReceived(FastbootState.Text, null, cleanContent);
                     }
 
@@ -179,7 +210,7 @@ public partial class FastbootDriver
                     start = DateTime.Now;
                     continue;
                 }
-                else if (prefix == "DATA")
+                else if (isData)
                 {
                     // DATA is expected to carry a hex size field and no extra payload.
                     string content = pendingStatus.Length > 4 ? pendingStatus.Substring(4).TrimEnd('\0') : "";
@@ -217,6 +248,10 @@ public partial class FastbootDriver
 
                     response.Result = FastbootState.Data;
                     response.DataSize = dsize;
+                    if (textBuffer != null)
+                    {
+                        response.Text = textBuffer.ToString();
+                    }
                     return response;
                 }
             }

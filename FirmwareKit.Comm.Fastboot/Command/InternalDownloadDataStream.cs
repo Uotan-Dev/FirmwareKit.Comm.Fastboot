@@ -1,5 +1,6 @@
 
 using Force.Crc32;
+using System.Buffers;
 
 namespace FirmwareKit.Comm.Fastboot;
 
@@ -63,33 +64,47 @@ public partial class FastbootDriver
         FastbootResponse response = RawCommand("download:" + length.ToString("x8"));
         if (response.Result != FastbootState.Data)
             return response;
+        if (response.DataSize != length)
+        {
+            return new FastbootResponse
+            {
+                Result = FastbootState.Fail,
+                Response = $"download size mismatch: requested {length}, device accepted {response.DataSize}"
+            };
+        }
 
-        byte[] buffer = new byte[OnceSendDataSize];
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(OnceSendDataSize);
         long bytesWritten = 0;
         uint crc = 0;
-
-        while (bytesWritten < length)
+        try
         {
-            int toRead = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
-            int readSize = stream.Read(buffer, 0, toRead);
-            if (readSize <= 0)
+            while (bytesWritten < length)
             {
-                throw new Exception("stream ended early: " + bytesWritten + "/" + length);
-            }
+                int toRead = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
+                int readSize = stream.Read(buffer, 0, toRead);
+                if (readSize <= 0)
+                {
+                    throw new Exception("stream ended early: " + bytesWritten + "/" + length);
+                }
 
-            if (useCrc)
-            {
-                crc = Crc32Algorithm.Append(crc, buffer, 0, readSize);
-            }
+                if (useCrc)
+                {
+                    crc = Crc32Algorithm.Append(crc, buffer, 0, readSize);
+                }
 
-            long written = Transport.Write(buffer, readSize);
-            if (written != readSize)
-            {
-                throw new Exception("Short write: " + written + "/" + readSize);
+                long written = Transport.Write(buffer, readSize);
+                if (written != readSize)
+                {
+                    throw new Exception("Short write: " + written + "/" + readSize);
+                }
+                bytesWritten += written;
+                if (onEvent)
+                    NotifyProgress(bytesWritten, length);
             }
-            bytesWritten += written;
-            if (onEvent)
-                NotifyProgress(bytesWritten, length);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         var finalRes = HandleResponse();
@@ -107,7 +122,14 @@ public partial class FastbootDriver
                         throw new Exception("CRC Mismatch: Device 0x" + deviceCrc.ToString("x8") + " != Host 0x" + crc.ToString("x8"));
                     }
                 }
-                catch (FormatException) { }
+                catch (FormatException)
+                {
+                    return new FastbootResponse
+                    {
+                        Result = FastbootState.Fail,
+                        Response = "invalid CRC response from device: " + resp
+                    };
+                }
             }
         }
 
