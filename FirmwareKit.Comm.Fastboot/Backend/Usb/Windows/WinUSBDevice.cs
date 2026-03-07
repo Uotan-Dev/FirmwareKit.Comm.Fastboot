@@ -137,21 +137,43 @@ public class WinUSBDevice : UsbDevice
 
     public override byte[] Read(int length)
     {
-        if (WinUSBHandle == IntPtr.Zero) throw new Exception("Device handle is closed.");
+        if (length <= 0) return Array.Empty<byte>();
 
         byte[] data = new byte[length];
-        uint totalBytesRead = 0;
+        int totalBytesRead = ReadInto(data, 0, length);
+        if (totalBytesRead == length) return data;
+        if (totalBytesRead == 0) return Array.Empty<byte>();
+
+        byte[] realData = new byte[totalBytesRead];
+        Buffer.BlockCopy(data, 0, realData, 0, totalBytesRead);
+        return realData;
+    }
+
+    public override int ReadInto(byte[] buffer, int offset, int length)
+    {
+        if (WinUSBHandle == IntPtr.Zero) throw new Exception("Device handle is closed.");
+        if (length <= 0) return 0;
+        if (offset < 0 || length < 0 || offset + length > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+
+        const int MaxChunkSize = 1024 * 1024;
+        int totalBytesRead = 0;
+        byte[] chunkBuffer = new byte[Math.Min(length, MaxChunkSize)];
 
         // AOSP style: Read in a loop until requested length is met or a short packet is received.
         while (totalBytesRead < length)
         {
-            uint toRead = (uint)Math.Min(length - totalBytesRead, 1024 * 1024);
+            uint toRead = (uint)Math.Min(length - totalBytesRead, chunkBuffer.Length);
             uint bytesRead;
 
-            if (WinUsb_ReadPipe(WinUSBHandle, ReadBulkID, data, toRead, out bytesRead, IntPtr.Zero))
+            if (WinUsb_ReadPipe(WinUSBHandle, ReadBulkID, chunkBuffer, toRead, out bytesRead, IntPtr.Zero))
             {
                 if (bytesRead == 0) break;
-                totalBytesRead += bytesRead;
+
+                Buffer.BlockCopy(chunkBuffer, 0, buffer, offset + totalBytesRead, (int)bytesRead);
+                totalBytesRead += (int)bytesRead;
 
                 // If we got a short packet (less than requested), it signifies end of transfer.
                 if (bytesRead < toRead) break;
@@ -164,13 +186,7 @@ public class WinUSBDevice : UsbDevice
             }
         }
 
-        if (totalBytesRead == length) return data;
-
-        if (totalBytesRead == 0 && length > 0) return Array.Empty<byte>();
-
-        byte[] realData = new byte[totalBytesRead];
-        Array.Copy(data, realData, (int)totalBytesRead);
-        return realData;
+        return totalBytesRead;
     }
 
     public override long Write(byte[] data, int length)

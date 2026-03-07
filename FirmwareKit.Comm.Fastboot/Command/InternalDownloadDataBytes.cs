@@ -1,5 +1,7 @@
 
 
+using System.Buffers;
+
 namespace FirmwareKit.Comm.Fastboot;
 
 public partial class FastbootDriver
@@ -32,19 +34,25 @@ public partial class FastbootDriver
 
         long bytesWritten = 0;
         int length = data.Length;
-        byte[] transferBuffer = new byte[Math.Min(OnceSendDataSize, length)];
-
-        while (bytesWritten < length)
+        byte[] transferBuffer = ArrayPool<byte>.Shared.Rent(Math.Min(OnceSendDataSize, length));
+        try
         {
-            int toWrite = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
-            Buffer.BlockCopy(data, (int)bytesWritten, transferBuffer, 0, toWrite);
-
-            long written = Transport.Write(transferBuffer, toWrite);
-            if (written != toWrite)
+            while (bytesWritten < length)
             {
-                return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{toWrite}" };
+                int toWrite = (int)Math.Min(OnceSendDataSize, length - bytesWritten);
+                Buffer.BlockCopy(data, (int)bytesWritten, transferBuffer, 0, toWrite);
+
+                long written = Transport.Write(transferBuffer, toWrite);
+                if (written != toWrite)
+                {
+                    return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{toWrite}" };
+                }
+                bytesWritten += written;
             }
-            bytesWritten += written;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(transferBuffer);
         }
 
         return HandleResponse();

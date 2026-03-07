@@ -115,23 +115,42 @@ public class LinuxUsbDevice : UsbDevice
 
     public override byte[] Read(int length)
     {
+        if (length <= 0) return Array.Empty<byte>();
+
+        byte[] buffer = new byte[length];
+        int count = ReadInto(buffer, 0, length);
+        if (count == length) return buffer;
+        if (count == 0) return Array.Empty<byte>();
+
+        byte[] result = new byte[count];
+        Buffer.BlockCopy(buffer, 0, result, 0, count);
+        return result;
+    }
+
+    public override int ReadInto(byte[] buffer, int offset, int length)
+    {
         const uint MAX_USBFS_BULK_SIZE = 16384;
         const int MAX_RETRIES = 5;
-        byte[] buffer = new byte[length];
-        int count = 0;
 
-        while (count < length)
+        if (length <= 0) return 0;
+        if (offset < 0 || length < 0 || offset + length > buffer.Length)
         {
-            int xfer = (length - count > (int)MAX_USBFS_BULK_SIZE) ? (int)MAX_USBFS_BULK_SIZE : (length - count);
-            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            try
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+
+        int count = 0;
+        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            while (count < length)
             {
+                int xfer = Math.Min(length - count, (int)MAX_USBFS_BULK_SIZE);
                 usbdevfs_bulktransfer bulk = new usbdevfs_bulktransfer
                 {
                     ep = ep_in,
                     len = (uint)xfer,
                     timeout = 5000,
-                    data = new IntPtr(handle.AddrOfPinnedObject().ToInt64() + count)
+                    data = new IntPtr(handle.AddrOfPinnedObject().ToInt64() + offset + count)
                 };
 
                 uint bulkCode = (IntPtr.Size == 8) ? USBDEVFS_BULK_X86_64 : USBDEVFS_BULK_X86;
@@ -159,18 +178,13 @@ public class LinuxUsbDevice : UsbDevice
                 count += n;
                 if (n < xfer) break;
             }
-            finally
-            {
-                handle.Free();
-            }
         }
-        if (count < length)
+        finally
         {
-            byte[] result = new byte[count];
-            Array.Copy(buffer, result, count);
-            return result;
+            handle.Free();
         }
-        return buffer;
+
+        return count;
     }
 
     public override long Write(byte[] data, int length)

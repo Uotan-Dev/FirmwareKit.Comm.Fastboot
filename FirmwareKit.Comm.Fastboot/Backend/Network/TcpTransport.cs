@@ -8,6 +8,8 @@ public class TcpTransport : IFastbootBufferedTransport
 {
     private const int DefaultIoTimeoutMs = 30000;
     private readonly TcpClient _client = new();
+    private readonly byte[] _readLenBuffer = new byte[8];
+    private readonly byte[] _writeLenBuffer = new byte[8];
     private NetworkStream? _stream;
     private long _messageBytesLeft = 0;
 
@@ -96,12 +98,11 @@ public class TcpTransport : IFastbootBufferedTransport
 
         if (_messageBytesLeft == 0)
         {
-            byte[] lenBuffer = new byte[8];
-            if (ReadFully(lenBuffer, 0, 8) != 8)
+            if (ReadFully(_readLenBuffer, 0, 8) != 8)
             {
                 throw new Exception("Failed to read message length from TCP stream.");
             }
-            _messageBytesLeft = BinaryPrimitives.ReadInt64BigEndian(lenBuffer);
+            _messageBytesLeft = BinaryPrimitives.ReadInt64BigEndian(_readLenBuffer);
         }
 
         int toRead = (int)Math.Min(length, _messageBytesLeft);
@@ -113,10 +114,9 @@ public class TcpTransport : IFastbootBufferedTransport
     public long Write(byte[] data, int length)
     {
         if (_stream == null) throw new InvalidOperationException("Stream not initialized");
-        byte[] header = new byte[8];
-        BinaryPrimitives.WriteInt64BigEndian(header, length);
+        BinaryPrimitives.WriteInt64BigEndian(_writeLenBuffer, length);
 
-        _stream.Write(header, 0, 8);
+        _stream.Write(_writeLenBuffer, 0, 8);
         _stream.Write(data, 0, length);
         _stream.Flush();
         return length;

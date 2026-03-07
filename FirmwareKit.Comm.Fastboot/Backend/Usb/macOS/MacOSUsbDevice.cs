@@ -152,12 +152,30 @@ public class MacOSUsbDevice : UsbDevice
 
     public override byte[] Read(int length)
     {
-        if (interfacePtr == IntPtr.Zero || bulkIn == 0) return Array.Empty<byte>();
+        if (length <= 0) return Array.Empty<byte>();
+
+        byte[] buffer = new byte[length];
+        int count = ReadInto(buffer, 0, length);
+        if (count == length) return buffer;
+        if (count == 0) return Array.Empty<byte>();
+
+        byte[] result = new byte[count];
+        Buffer.BlockCopy(buffer, 0, result, 0, count);
+        return result;
+    }
+
+    public override int ReadInto(byte[] buffer, int offset, int length)
+    {
+        if (interfacePtr == IntPtr.Zero || bulkIn == 0) return 0;
+        if (length <= 0) return 0;
+        if (offset < 0 || length < 0 || offset + length > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
 
         const int maxLenToRead = 1048576;
         int lenRemaining = length;
         int count = 0;
-        byte[] buffer = new byte[length];
         var readPipe = GetDelegate<ReadPipeTODelegate>(interfacePtr, Offset_ReadPipeTO);
 
         GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
@@ -166,7 +184,7 @@ public class MacOSUsbDevice : UsbDevice
             while (lenRemaining > 0)
             {
                 int lenToRead = Math.Min(lenRemaining, maxLenToRead);
-                IntPtr ptr = new IntPtr(handle.AddrOfPinnedObject().ToInt64() + count);
+                IntPtr ptr = new IntPtr(handle.AddrOfPinnedObject().ToInt64() + offset + count);
                 uint size = (uint)lenToRead;
 
                 int kr = readPipe(interfacePtr, bulkIn, ptr, ref size, 5000, 5000);
@@ -185,13 +203,7 @@ public class MacOSUsbDevice : UsbDevice
                 if (size < lenToRead) break;
             }
 
-            if (count < length)
-            {
-                byte[] result = new byte[count];
-                Array.Copy(buffer, result, count);
-                return result;
-            }
-            return buffer;
+            return count;
         }
         finally
         {

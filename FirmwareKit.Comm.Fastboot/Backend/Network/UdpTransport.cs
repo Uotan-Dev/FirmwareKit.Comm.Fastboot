@@ -209,24 +209,193 @@ public class UdpTransport : IFastbootBufferedTransport
             throw new ArgumentOutOfRangeException(nameof(length));
         }
 
-        byte[] response = SendDataInternal(PacketId.Fastboot, [], 0, _maxTransmissionAttempts);
-        if (response.Length > length)
-        {
-            throw new Exception("UDP protocol error: receive overflow, target sent too much fastboot data.");
-        }
+        int read = ReceiveFastbootInto(buffer, offset, length, _maxTransmissionAttempts, out ushort nextSeq);
+        _sequence = nextSeq;
+        return read;
+    }
 
-        Buffer.BlockCopy(response, 0, buffer, offset, response.Length);
-        return response.Length;
+    private int ReceiveFastbootInto(byte[] output, int outputOffset, int outputLength, int attempts, out ushort nextSeq)
+    {
+        PacketId currentId = PacketId.Fastboot;
+        PacketFlag currentFlag = PacketFlag.None;
+        ushort currentSeq = (ushort)_sequence;
+        int written = 0;
+
+        while (true)
+        {
+            byte[] packet = new byte[HeaderSize];
+            packet[0] = (byte)currentId;
+            packet[1] = (byte)currentFlag;
+            BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2, 2), currentSeq);
+
+            bool gotValidResponse = false;
+            for (int i = 0; i < attempts; i++)
+            {
+                _client.Send(packet, packet.Length, _endpoint);
+
+                try
+                {
+                    while (true)
+                    {
+                        IPEndPoint from = new(IPAddress.Any, 0);
+                        byte[] rxPacket = _client.Receive(ref from);
+                        if (rxPacket.Length < HeaderSize) continue;
+
+                        ushort responseSeq = BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2));
+                        byte responseId = rxPacket[0];
+                        if (responseSeq != currentSeq) continue;
+                        if (responseId != (byte)currentId && responseId != (byte)PacketId.Error) continue;
+
+                        if (responseId == (byte)PacketId.Error)
+                        {
+                            throw new Exception("Target returned error response.");
+                        }
+
+                        int payloadLen = rxPacket.Length - HeaderSize;
+                        if (payloadLen > 0)
+                        {
+                            if (written + payloadLen > outputLength)
+                            {
+                                throw new Exception("UDP protocol error: receive overflow, target sent too much fastboot data.");
+                            }
+
+                            Buffer.BlockCopy(rxPacket, HeaderSize, output, outputOffset + written, payloadLen);
+                            written += payloadLen;
+                        }
+
+                        gotValidResponse = true;
+                        currentSeq = (ushort)((currentSeq + 1) & 0xFFFF);
+
+                        bool continuation = (rxPacket[1] & (byte)PacketFlag.Continuation) != 0;
+                        if (!continuation)
+                        {
+                            nextSeq = currentSeq;
+                            return written;
+                        }
+
+                        // Prompt the target for the next continuation fragment.
+                        currentId = (PacketId)responseId;
+                        currentFlag = PacketFlag.None;
+                        break;
+                    }
+                }
+                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+                {
+                    continue;
+                }
+
+                if (gotValidResponse)
+                {
+                    break;
+                }
+            }
+
+            if (!gotValidResponse)
+            {
+                throw new Exception($"Failed to receive response after {attempts} attempts.");
+            }
+        }
     }
 
     public long Write(byte[] data, int length)
     {
-        byte[] response = SendDataInternal(PacketId.Fastboot, data, length, _maxTransmissionAttempts);
-        if (response.Length > 0)
-        {
-            throw new Exception("UDP protocol error: target sent fastboot data out-of-turn.");
-        }
+        SendFastbootNoPayload(PacketId.Fastboot, data, length, _maxTransmissionAttempts);
         return length;
+    }
+
+    private void SendFastbootNoPayload(PacketId id, byte[] txData, int txLength, int attempts)
+    {
+        int offset = 0;
+
+        do
+        {
+            int chunkLen = Math.Min(txLength - offset, _maxDataLength);
+            PacketFlag flag = (offset + chunkLen < txLength) ? PacketFlag.Continuation : PacketFlag.None;
+
+            SendSinglePacketNoPayload(id, (ushort)_sequence, flag, txData, offset, chunkLen, attempts, out ushort nextSeq);
+
+            _sequence = nextSeq;
+            offset += chunkLen;
+        } while (offset < txLength);
+    }
+
+    private void SendSinglePacketNoPayload(PacketId id, ushort seq, PacketFlag flag, byte[] txData, int txOffset, int txLen, int attempts, out ushort nextSeq)
+    {
+        PacketId currentId = id;
+        PacketFlag currentFlag = flag;
+        int currentTxOffset = txOffset;
+        int currentTxLen = txLen;
+        ushort currentSeq = seq;
+
+        while (true)
+        {
+            byte[] packet = new byte[HeaderSize + currentTxLen];
+            packet[0] = (byte)currentId;
+            packet[1] = (byte)currentFlag;
+            BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2, 2), currentSeq);
+            if (currentTxLen > 0) Array.Copy(txData, currentTxOffset, packet, HeaderSize, currentTxLen);
+
+            bool gotValidResponse = false;
+            for (int i = 0; i < attempts; i++)
+            {
+                _client.Send(packet, packet.Length, _endpoint);
+
+                try
+                {
+                    while (true)
+                    {
+                        IPEndPoint from = new(IPAddress.Any, 0);
+                        byte[] rxPacket = _client.Receive(ref from);
+                        if (rxPacket.Length < HeaderSize) continue;
+
+                        ushort responseSeq = BinaryPrimitives.ReadUInt16BigEndian(rxPacket.AsSpan(2, 2));
+                        byte responseId = rxPacket[0];
+                        if (responseSeq != currentSeq) continue;
+                        if (responseId != (byte)currentId && responseId != (byte)PacketId.Error) continue;
+
+                        if (responseId == (byte)PacketId.Error)
+                        {
+                            throw new Exception("Target returned error response.");
+                        }
+
+                        if (rxPacket.Length > HeaderSize)
+                        {
+                            throw new Exception("UDP protocol error: target sent fastboot data out-of-turn.");
+                        }
+
+                        gotValidResponse = true;
+                        currentSeq = (ushort)((currentSeq + 1) & 0xFFFF);
+
+                        bool continuation = (rxPacket[1] & (byte)PacketFlag.Continuation) != 0;
+                        if (!continuation)
+                        {
+                            nextSeq = currentSeq;
+                            return;
+                        }
+
+                        currentId = (PacketId)responseId;
+                        currentFlag = PacketFlag.None;
+                        currentTxOffset = 0;
+                        currentTxLen = 0;
+                        break;
+                    }
+                }
+                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut)
+                {
+                    continue;
+                }
+
+                if (gotValidResponse)
+                {
+                    break;
+                }
+            }
+
+            if (!gotValidResponse)
+            {
+                throw new Exception($"Failed to receive response after {attempts} attempts.");
+            }
+        }
     }
 
     public void Dispose()
