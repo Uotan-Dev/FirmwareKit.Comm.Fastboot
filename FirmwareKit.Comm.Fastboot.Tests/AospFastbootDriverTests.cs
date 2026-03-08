@@ -1,5 +1,4 @@
 using System.Text;
-using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

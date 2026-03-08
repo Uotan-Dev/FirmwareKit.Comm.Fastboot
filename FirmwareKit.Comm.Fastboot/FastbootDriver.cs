@@ -1,8 +1,6 @@
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
-using FirmwareKit.Sparse.Core;
-using FirmwareKit.Sparse.Models;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;

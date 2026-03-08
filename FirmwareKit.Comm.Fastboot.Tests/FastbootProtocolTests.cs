@@ -1,7 +1,6 @@
+using FirmwareKit.Comm.Fastboot.Usb;
 using System.Globalization;
 using System.Text;
-using FirmwareKit.Comm.Fastboot.Usb;
-using FirmwareKit.Comm.Fastboot;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

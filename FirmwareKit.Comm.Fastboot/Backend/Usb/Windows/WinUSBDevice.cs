@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using static FirmwareKit.Comm.Fastboot.Usb.Windows.WinUSBAPI;
 using static FirmwareKit.Comm.Fastboot.Usb.Windows.Win32API;
+using static FirmwareKit.Comm.Fastboot.Usb.Windows.WinUSBAPI;
 
 namespace FirmwareKit.Comm.Fastboot.Usb.Windows;
 

@@ -244,39 +244,56 @@ namespace FastbootCLI
                     break;
 
                 case "flash":
-                    bool disableVerity = args.Contains("--disable-verity");
-                    bool disableVerification = args.Contains("--disable-verification");
-                    var flashArgs = args.Where(a => !a.StartsWith("--")).ToList();
-                    if (flashArgs.Count < 1) throw new Exception("usage: fastboot flash <partition> [filename]");
-                    string part = GetPartition(flashArgs[0]);
-                    string? file = flashArgs.Count > 1 ? flashArgs[1] : null;
+                    if (args.Count == 0) throw new Exception("usage: fastboot flash [--disable-verity] [--disable-verification] <partition> [filename]");
 
-                    if (file == null)
+                    bool disableVerity = false;
+                    bool disableVerification = false;
+                    var flashArgs = new List<string>();
+                    foreach (var a in args)
                     {
-                        string? envOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
-                        if (!string.IsNullOrEmpty(envOut))
-                        {
-                            string imgName = $"{flashArgs[0]}.img";
-                            string candidate = Path.Combine(envOut, imgName);
-                            if (File.Exists(candidate)) file = candidate;
-                        }
+                        if (a == "--disable-verity") disableVerity = true;
+                        else if (a == "--disable-verification") disableVerification = true;
+                        else flashArgs.Add(a);
                     }
 
-                    if (file == null) throw new Exception("Could not find image. Please specify filename or set $ANDROID_PRODUCT_OUT.");
-                    if (!File.Exists(file)) throw new Exception($"File not found: {file}");
+                    if (flashArgs.Count == 0) throw new Exception("usage: fastboot flash [--disable-verity] [--disable-verification] <partition> [filename]");
 
-                    if (part.StartsWith("vbmeta") && (disableVerity || disableVerification))
-                        util.FlashVbmeta(part, file, disableVerity, disableVerification).ThrowIfError();
+                    string flashPartition = flashArgs[0];
+                    string flashFile;
+                    if (flashArgs.Count > 1)
+                    {
+                        flashFile = flashArgs[1];
+                    }
                     else
                     {
-                        if (force)
+                        string? productOutForFlash = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
+                        if (string.IsNullOrEmpty(productOutForFlash))
                         {
-                            util.OemCommand("snapshot-update cancel").ThrowIfError();
+                            throw new Exception("filename is required when ANDROID_PRODUCT_OUT is not set");
                         }
-
-                        using var fs = File.OpenRead(file);
-                        util.FlashUnsparseImage(part, fs, fs.Length).ThrowIfError();
+                        flashFile = Path.Combine(productOutForFlash, flashPartition + ".img");
                     }
+
+                    if (!File.Exists(flashFile)) throw new FileNotFoundException(flashFile);
+
+                    string? slotOverride = slot;
+                    if (slotOverride == "other")
+                    {
+                        string currentSlot = util.GetCurrentSlot();
+                        slotOverride = currentSlot == "a" ? "b" : "a";
+                    }
+
+                    bool isVbmeta = flashPartition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
+                    if (isVbmeta && (disableVerity || disableVerification))
+                    {
+                        string vbmetaTarget = GetPartition(flashPartition);
+                        util.FlashVbmeta(vbmetaTarget, flashFile, disableVerity, disableVerification).ThrowIfError();
+                    }
+                    else
+                    {
+                        util.FlashImage(flashPartition, flashFile, slotOverride);
+                    }
+
                     break;
 
                 case "flashall":
