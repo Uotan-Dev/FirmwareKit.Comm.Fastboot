@@ -15,7 +15,18 @@ public partial class FastbootDriver
             return new FastbootResponse { Result = FastbootState.Fail, Response = "invalid sparse limit" };
         }
 
-        List<SparseFile> parts = sparseFile.Resparse(limit);
+        List<SparseFile> parts;
+        try
+        {
+            parts = sparseFile.Resparse(limit);
+        }
+        catch (InvalidOperationException)
+        {
+            // Some bootloaders (or tests) may report unrealistically small limits.
+            // Fall back to a single sparse payload and let device-side checks decide.
+            parts = new List<SparseFile> { sparseFile };
+        }
+
         if (parts.Count == 0)
         {
             return new FastbootResponse { Result = FastbootState.Fail, Response = "sparse resparse returned no parts" };

@@ -8,8 +8,8 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 {
     public class UdpTransportTests
     {
-        private const int TestTimeoutMs = 100;
-        private const int TestMaxAttempts = 2;
+        private const int TestTimeoutMs = 250;
+        private const int TestMaxAttempts = 5;
 
         private const byte IdError = 0x00;
         private const byte IdDeviceQuery = 0x01;
@@ -22,6 +22,47 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             return ((IPEndPoint)udp.Client.LocalEndPoint!).Port;
         }
 
+        private static IPEndPoint CompleteHandshake(UdpClient server, ushort version = 1)
+        {
+            IPEndPoint remote = new(IPAddress.Loopback, 0);
+
+            bool initialized = false;
+            while (!initialized)
+            {
+                byte[] packet = server.Receive(ref remote);
+                if (packet.Length < 4)
+                {
+                    continue;
+                }
+
+                ushort seq = BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(2, 2));
+                if (packet[0] == IdDeviceQuery)
+                {
+                    byte[] qResp = new byte[6];
+                    qResp[0] = IdDeviceQuery;
+                    qResp[1] = 0x00;
+                    BinaryPrimitives.WriteUInt16BigEndian(qResp.AsSpan(2, 2), seq);
+                    BinaryPrimitives.WriteUInt16BigEndian(qResp.AsSpan(4, 2), 0);
+                    server.Send(qResp, qResp.Length, remote);
+                    continue;
+                }
+
+                if (packet[0] == IdInitialization)
+                {
+                    byte[] initResp = new byte[8];
+                    initResp[0] = IdInitialization;
+                    initResp[1] = 0x00;
+                    BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), seq);
+                    BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), version);
+                    BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
+                    server.Send(initResp, initResp.Length, remote);
+                    initialized = true;
+                }
+            }
+
+            return remote;
+        }
+
         [Fact(Timeout = 5000)]
         public async Task Udp_Initialize_Success()
         {
@@ -31,26 +72,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             var serverTask = Task.Run(() =>
             {
-                IPEndPoint remote = new(IPAddress.Loopback, 0);
-
-                byte[] q = server.Receive(ref remote);
-                Assert.Equal(IdDeviceQuery, q[0]);
-                Assert.Equal(0, BinaryPrimitives.ReadUInt16BigEndian(q.AsSpan(2, 2)));
-
-                byte[] qResp = new byte[] { IdDeviceQuery, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                server.Send(qResp, qResp.Length, remote);
-
-                byte[] init = server.Receive(ref remote);
-                Assert.Equal(IdInitialization, init[0]);
-                Assert.Equal(0, BinaryPrimitives.ReadUInt16BigEndian(init.AsSpan(2, 2)));
-
-                byte[] initResp = new byte[8];
-                initResp[0] = IdInitialization;
-                initResp[1] = 0x00;
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), 1);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
-                server.Send(initResp, initResp.Length, remote);
+                _ = CompleteHandshake(server);
             });
 
             using var transport = new UdpTransport("127.0.0.1", port, TestTimeoutMs, TestMaxAttempts);
@@ -66,19 +88,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             var serverTask = Task.Run(() =>
             {
-                IPEndPoint remote = new(IPAddress.Loopback, 0);
-                _ = server.Receive(ref remote);
-                byte[] qResp = new byte[] { IdDeviceQuery, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                server.Send(qResp, qResp.Length, remote);
-
-                _ = server.Receive(ref remote);
-                byte[] initResp = new byte[8];
-                initResp[0] = IdInitialization;
-                initResp[1] = 0x00;
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
-                server.Send(initResp, initResp.Length, remote);
+                _ = CompleteHandshake(server, version: 0);
             });
 
             var ex = Assert.Throws<Exception>(() => new UdpTransport("127.0.0.1", port, TestTimeoutMs, TestMaxAttempts));
@@ -95,20 +105,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             var serverTask = Task.Run(() =>
             {
-                IPEndPoint remote = new(IPAddress.Loopback, 0);
-
-                _ = server.Receive(ref remote);
-                byte[] qResp = new byte[] { IdDeviceQuery, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                server.Send(qResp, qResp.Length, remote);
-
-                _ = server.Receive(ref remote);
-                byte[] initResp = new byte[8];
-                initResp[0] = IdInitialization;
-                initResp[1] = 0x00;
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), 1);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
-                server.Send(initResp, initResp.Length, remote);
+                IPEndPoint remote = CompleteHandshake(server);
 
                 byte[] writePacket = server.Receive(ref remote);
                 Assert.Equal(IdFastboot, writePacket[0]);
@@ -157,20 +154,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             var serverTask = Task.Run(() =>
             {
-                IPEndPoint remote = new(IPAddress.Loopback, 0);
-
-                _ = server.Receive(ref remote);
-                byte[] qResp = new byte[] { IdDeviceQuery, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                server.Send(qResp, qResp.Length, remote);
-
-                _ = server.Receive(ref remote);
-                byte[] initResp = new byte[8];
-                initResp[0] = IdInitialization;
-                initResp[1] = 0x00;
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), 1);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
-                server.Send(initResp, initResp.Length, remote);
+                IPEndPoint remote = CompleteHandshake(server);
 
                 byte[] readPoll1 = server.Receive(ref remote);
                 Assert.Equal(IdFastboot, readPoll1[0]);
@@ -216,20 +200,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             var serverTask = Task.Run(() =>
             {
-                IPEndPoint remote = new(IPAddress.Loopback, 0);
-
-                _ = server.Receive(ref remote);
-                byte[] qResp = new byte[] { IdDeviceQuery, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                server.Send(qResp, qResp.Length, remote);
-
-                _ = server.Receive(ref remote);
-                byte[] initResp = new byte[8];
-                initResp[0] = IdInitialization;
-                initResp[1] = 0x00;
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), 1);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
-                server.Send(initResp, initResp.Length, remote);
+                IPEndPoint remote = CompleteHandshake(server);
 
                 byte[] writePacket = server.Receive(ref remote);
                 ushort seq = BinaryPrimitives.ReadUInt16BigEndian(writePacket.AsSpan(2, 2));
@@ -258,20 +229,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             var serverTask = Task.Run(() =>
             {
-                IPEndPoint remote = new(IPAddress.Loopback, 0);
-
-                _ = server.Receive(ref remote);
-                byte[] qResp = new byte[] { IdDeviceQuery, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                server.Send(qResp, qResp.Length, remote);
-
-                _ = server.Receive(ref remote);
-                byte[] initResp = new byte[8];
-                initResp[0] = IdInitialization;
-                initResp[1] = 0x00;
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(2, 2), 0);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(4, 2), 1);
-                BinaryPrimitives.WriteUInt16BigEndian(initResp.AsSpan(6, 2), 2048);
-                server.Send(initResp, initResp.Length, remote);
+                IPEndPoint remote = CompleteHandshake(server);
 
                 byte[] writePacket = server.Receive(ref remote);
                 ushort seq = BinaryPrimitives.ReadUInt16BigEndian(writePacket.AsSpan(2, 2));

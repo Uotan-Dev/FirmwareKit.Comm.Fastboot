@@ -1,4 +1,5 @@
 using FirmwareKit.Comm.Fastboot.Usb;
+using FirmwareKit.Sparse.Core;
 using System.Globalization;
 using System.Text;
 
@@ -585,6 +586,50 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             using var stream = new MemoryStream(imageBytes);
             var response = util.FlashUnsparseImage("boot", stream, stream.Length);
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Contains(transport.Commands, c => c.StartsWith("download:", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("flash:boot", transport.Commands);
+        }
+
+        [Fact]
+        public void FlashUnsparseImage_LogicalPartition_ResizesBeforeFlash()
+        {
+            byte[] imageBytes = new byte[64];
+            var transport = new ProtocolDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["getvar:is-logical:system_b"] = "OKAYyes",
+                ["getvar:is-userspace"] = "OKAYyes",
+                ["resize-logical-partition:system_b:64"] = "OKAY",
+                ["flash:system_b"] = "OKAY"
+            });
+
+            var util = new FastbootDriver(transport);
+            using var stream = new MemoryStream(imageBytes);
+
+            var response = util.FlashUnsparseImage("system_b", stream, stream.Length);
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            int resizeIndex = transport.Commands.FindIndex(c => c.Equals("resize-logical-partition:system_b:64", StringComparison.OrdinalIgnoreCase));
+            int downloadIndex = transport.Commands.FindIndex(c => c.StartsWith("download:", StringComparison.OrdinalIgnoreCase));
+            Assert.True(resizeIndex >= 0);
+            Assert.True(downloadIndex > resizeIndex);
+            Assert.Contains("flash:system_b", transport.Commands);
+        }
+
+        [Fact]
+        public void FlashSparseFile_TinyLimit_FallsBackToSingleSparseTransfer()
+        {
+            var transport = new ProtocolDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["flash:boot"] = "OKAY"
+            });
+            var util = new FastbootDriver(transport);
+
+            using var sparse = new SparseFile(4096, 4096);
+            sparse.AddRawChunk(new byte[4096]);
+
+            var response = util.FlashSparseFile("boot", sparse, 64);
 
             Assert.Equal(FastbootState.Success, response.Result);
             Assert.Contains(transport.Commands, c => c.StartsWith("download:", StringComparison.OrdinalIgnoreCase));
