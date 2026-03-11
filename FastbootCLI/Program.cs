@@ -104,7 +104,7 @@ namespace FastbootCLI
             }
 
             using FastbootDriver util = new FastbootDriver(target);
-            if (sparseLimit.HasValue) FastbootDriver.SparseMaxDownloadSize = (int)Math.Min(int.MaxValue, sparseLimit.Value);
+            if (sparseLimit.HasValue) FastbootDriver.SparseMaxDownloadSize = Math.Min((long)uint.MaxValue, sparseLimit.Value);
 
             util.ReceivedFromDevice += (s, e) =>
             {
@@ -217,7 +217,15 @@ namespace FastbootCLI
 
                 case "reboot":
                     string targetStr = args.Count > 0 ? args[0] : "";
-                    util.Reboot(targetStr).ThrowIfError();
+                    if (targetStr == "fastboot")
+                    {
+                        Console.Error.WriteLine("waiting for any device >");
+                        util.EnsureUserspace();
+                    }
+                    else
+                    {
+                        util.Reboot(targetStr).ThrowIfError();
+                    }
                     break;
 
                 case "reboot-bootloader":
@@ -225,7 +233,8 @@ namespace FastbootCLI
                     break;
 
                 case "reboot-fastboot":
-                    util.Reboot("fastboot").ThrowIfError();
+                    Console.Error.WriteLine("waiting for any device >");
+                    util.EnsureUserspace();
                     break;
 
                 case "reboot-recovery":

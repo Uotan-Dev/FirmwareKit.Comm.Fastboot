@@ -199,7 +199,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact]
         public void GetMaxDownloadSize_ClampsToSparseLimit()
         {
-            int originalLimit = FastbootDriver.SparseMaxDownloadSize;
+            long originalLimit = FastbootDriver.SparseMaxDownloadSize;
             try
             {
                 FastbootDriver.SparseMaxDownloadSize = 1024 * 1024 * 1024;

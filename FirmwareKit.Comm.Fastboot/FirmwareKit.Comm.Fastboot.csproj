@@ -30,9 +30,8 @@
 
   <ItemGroup>
     <PackageReference Include="Crc32.NET" Version="1.2.0" />
-    <PackageReference Include="FirmwareKit.AVB" Version="1.0.0" />
     <PackageReference Include="FirmwareKit.Lp" Version="1.0.0" />
-    <PackageReference Include="FirmwareKit.Sparse" Version="1.0.0" />
+    <PackageReference Include="FirmwareKit.Sparse" Version="1.0.1" />
     <PackageReference Include="LibUsbDotNet" Version="3.0.167-alpha" />
   </ItemGroup>
 

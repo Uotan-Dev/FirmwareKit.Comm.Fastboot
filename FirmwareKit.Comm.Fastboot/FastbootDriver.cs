@@ -143,7 +143,9 @@ public partial class FastbootDriver : IDisposable
     /// Size of data to send in a single chunk (512KB for better WinUSB/Qualcomm compatibility)
     /// </summary>
     public static int OnceSendDataSize = 512 * 1024;
-    public static int SparseMaxDownloadSize = 1024 * 1024 * 1024; // 1GB default limit to match AOSP RESPARSE_LIMIT
+    // Host-side resparse limit. Keep this <= fastboot protocol DATA field max (uint32).
+    // A wider default avoids unnecessary sparse conversion for large images, reducing peak memory usage.
+    public static long SparseMaxDownloadSize = uint.MaxValue;
 
     private static readonly string[] PartitionPriority = {
     "preloader", "bootloader", "radio", "dram", "md1img", "xbl", "abl", "keystore",
@@ -341,12 +343,14 @@ public partial class FastbootDriver : IDisposable
             NotifyCurrentStep("Operation requires fastbootd, rebooting...");
             Reboot("fastboot").ThrowIfError();
 
-            System.Threading.Thread.Sleep(2000);
+            // Match AOSP behavior: allow disconnect to happen before attempting reconnect.
+            System.Threading.Thread.Sleep(1000);
+            NotifyCurrentStep("waiting for any device >");
 
             if (Transport is UsbDevice usbDev)
             {
                 var newUtil = WaitForDevice(UsbManager.GetAllDevices, usbDev.SerialNumber, 30);
-                if (newUtil == null) throw new Exception("Failed to reconnect to device after rebooting to fastbootd.");
+                if (newUtil == null) throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
 
                 this.Transport = newUtil.Transport;
             }
@@ -368,7 +372,7 @@ public partial class FastbootDriver : IDisposable
                     }
                     catch { System.Threading.Thread.Sleep(1000); }
                 }
-                if (!connected) throw new Exception("Failed to reconnect to TCP device after rebooting to fastbootd.");
+                if (!connected) throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
             }
             else if (Transport is UdpTransport udp)
             {
@@ -388,12 +392,18 @@ public partial class FastbootDriver : IDisposable
                     }
                     catch { System.Threading.Thread.Sleep(1000); }
                 }
-                if (!connected) throw new Exception("Failed to reconnect to UDP device after rebooting to fastbootd.");
+                if (!connected) throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
             }
             else
             {
                 throw new NotSupportedException("Automatic reboot to userspace is only supported for USB, TCP and UDP transports.");
             }
+
+            if (!IsUserspace())
+            {
+                throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
+            }
+
             _varCache.Clear();
         }
     }
@@ -481,8 +491,8 @@ public partial class FastbootDriver : IDisposable
             return SparseMaxDownloadSize;
         }
 
-        // Match AOSP's host-side safeguard: never exceed the resparse limit.
-        return Math.Min(parsedSize, SparseMaxDownloadSize);
+        // Keep within protocol limits and the configurable host-side resparse limit.
+        return Math.Min(Math.Min(parsedSize, SparseMaxDownloadSize), uint.MaxValue);
     }
 
     /// <summary>
