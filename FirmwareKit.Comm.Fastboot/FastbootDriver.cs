@@ -40,7 +40,7 @@ public partial class FastbootDriver : IDisposable
         try
         {
             // Always query device directly; cached values can be stale across reboot mode changes.
-            return GetVar("is-userspace", useCache: false) == "yes";
+            return GetVar("is-userspace", useCache: false, quiet: true) == "yes";
         }
         catch
         {
@@ -291,11 +291,11 @@ public partial class FastbootDriver : IDisposable
     /// <summary>
     /// Gets a single attribute (with caching if enabled)
     /// </summary>
-    public string GetVar(string key, bool useCache = true)
+    public string GetVar(string key, bool useCache = true, bool quiet = false)
     {
-        FastbootDebug.Log($"GetVar(key={key}, useCache={useCache})");
+        FastbootDebug.Log($"GetVar(key={key}, useCache={useCache}, quiet={quiet})");
         if (useCache && _varCache.TryGetValue(key, out string? cached)) return cached;
-        var resObj = RawCommand("getvar:" + key);
+        var resObj = RawCommand("getvar:" + key, quiet);
         if (resObj.Result == FastbootState.Fail || resObj.Result == FastbootState.Timeout)
         {
             // Do not cache transient failures/timeouts; caller can retry later.

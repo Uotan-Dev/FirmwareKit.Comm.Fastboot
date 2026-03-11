@@ -8,7 +8,7 @@ public partial class FastbootDriver
     /// <summary>
     /// Sends the command
     /// </summary>
-    public FastbootResponse RawCommand(string command)
+    public FastbootResponse RawCommand(string command, bool quiet = false)
     {
         FastbootDebug.Log("Sending command: " + command);
         byte[] cmdBytes = Encoding.UTF8.GetBytes(command);
@@ -38,6 +38,11 @@ public partial class FastbootDriver
         FastbootDebug.Log("Waiting for response...");
         var response = HandleResponse();
         FastbootDebug.Log("Response received: " + response.Response);
+
+        if (quiet)
+        {
+            return response;
+        }
 
         if (response.Result == FastbootState.Fail)
         {
