@@ -39,7 +39,8 @@ public partial class FastbootDriver : IDisposable
         FastbootDebug.Log($"IsUserspace()");
         try
         {
-            return GetVar("is-userspace") == "yes";
+            // Always query device directly; cached values can be stale across reboot mode changes.
+            return GetVar("is-userspace", useCache: false) == "yes";
         }
         catch
         {
@@ -343,6 +344,9 @@ public partial class FastbootDriver : IDisposable
             NotifyCurrentStep("Operation requires fastbootd, rebooting...");
             Reboot("fastboot").ThrowIfError();
 
+            // Clear stale vars (including is-userspace=no) before reconnect and re-check.
+            _varCache.Clear();
+
             // Match AOSP behavior: allow disconnect to happen before attempting reconnect.
             System.Threading.Thread.Sleep(1000);
             NotifyCurrentStep("waiting for any device >");
@@ -399,7 +403,20 @@ public partial class FastbootDriver : IDisposable
                 throw new NotSupportedException("Automatic reboot to userspace is only supported for USB, TCP and UDP transports.");
             }
 
-            if (!IsUserspace())
+            DateTime userspaceWaitStart = DateTime.Now;
+            bool enteredUserspace = false;
+            while ((DateTime.Now - userspaceWaitStart).TotalSeconds < 30)
+            {
+                if (IsUserspace())
+                {
+                    enteredUserspace = true;
+                    break;
+                }
+
+                System.Threading.Thread.Sleep(1000);
+            }
+
+            if (!enteredUserspace)
             {
                 throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
             }
