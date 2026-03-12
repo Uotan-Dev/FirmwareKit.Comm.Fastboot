@@ -763,7 +763,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         }
 
         [Fact]
-        public void NotifyCurrentStep_DefaultWritesToConsole()
+        public void NotifyCurrentStep_DefaultDoesNotWriteToConsole()
         {
             var util = new FastbootDriver(new ProtocolDownloadCaptureTransport());
             using var err = new StringWriter();
@@ -773,11 +773,11 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Console.SetError(orig);
 
             string output = err.ToString();
-            Assert.Contains("example step", output);
+            Assert.Equal(string.Empty, output);
         }
 
         [Fact]
-        public void NotifyProgress_DefaultWritesToConsole()
+        public void NotifyProgress_DefaultDoesNotWriteToConsole()
         {
             var util = new FastbootDriver(new ProtocolDownloadCaptureTransport());
             using var err = new StringWriter();
@@ -787,8 +787,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Console.SetError(orig);
 
             string output = err.ToString();
-            Assert.Contains("50/200", output);
-            Assert.Contains("25%", output);
+            Assert.Equal(string.Empty, output);
         }
 
         [Fact]

@@ -16,6 +16,7 @@ namespace FastbootCLI
         static void Main(string[] args)
         {
             FastbootDebug.IsEnabled = Environment.GetEnvironmentVariable("FASTBOOT_DEBUG") == "1";
+            FastbootDebug.Output = message => Console.Error.WriteLine($"[DEBUG] {message}");
 
             if (args.Length == 0) { ShowHelp(); return; }
 
@@ -43,7 +44,7 @@ namespace FastbootCLI
                 }
                 else if (arg == "--debug") FastbootDebug.IsEnabled = true;
                 else if (arg == "--fallback") UsbManager.ForceLibUsb = false;
-                else if (arg == "--version" || arg == "version") { Console.WriteLine("fastboot version 1.2.5"); return; }
+                else if (arg == "--version" || arg == "version") { Console.Error.WriteLine("fastboot version 1.2.5"); return; }
                 else if (arg == "-h" || arg == "--help" || arg == "help") { ShowHelp(); return; }
                 else if (!arg.StartsWith("-"))
                 {
@@ -107,6 +108,56 @@ namespace FastbootCLI
             util.ReceivedFromDevice += (s, e) =>
             {
                 if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
+                if (e.NewText != null) Console.Error.Write(e.NewText);
+            };
+            util.CommandCompleted += (s, e) =>
+            {
+                if (e.Quiet) return;
+
+                var command = e.Command;
+                var response = e.Response;
+                if (response.Result == FastbootState.Fail)
+                {
+                    if (command.StartsWith("snapshot-update", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.Error.WriteLine($"Snapshot                                           FAILED (remote: '{response.Response}')");
+                    }
+                    else if (!command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.Error.WriteLine($"FAILED (remote: '{response.Response}')");
+                    }
+                    return;
+                }
+
+                if (command.StartsWith("devices", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.IsNullOrEmpty(response.Response))
+                    {
+                        Console.WriteLine(response.Response);
+                    }
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(response.Response)) return;
+
+                if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(command, "getvar:all", StringComparison.OrdinalIgnoreCase))
+                {
+                    string key = command.Substring("getvar:".Length);
+                    bool alreadyPrinted = response.Info.Any(i => i.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase));
+                    if (!alreadyPrinted)
+                    {
+                        Console.Error.WriteLine($"{key}: {response.Response}");
+                    }
+                }
+                else if (!command.StartsWith("getvar:all", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Error.WriteLine(response.Response);
+                }
+            };
+            util.CurrentStepChanged += (s, step) =>
+            {
+                if (!string.IsNullOrEmpty(step)) Console.Error.WriteLine(step);
             };
 
             foreach (var cmd in pendingCommands)

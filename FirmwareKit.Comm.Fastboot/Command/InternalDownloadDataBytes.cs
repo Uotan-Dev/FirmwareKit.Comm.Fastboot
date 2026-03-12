@@ -23,12 +23,7 @@ public partial class FastbootDriver
         FastbootResponse response = RawCommand("download:" + data.Length.ToString("x8"));
         if (response.Result != FastbootState.Data)
         {
-            return new FastbootResponse
-            {
-                Result = FastbootState.Fail,
-                Response = "protocol error: expected DATA response to download command, got " + response.Result +
-                    (string.IsNullOrEmpty(response.Response) ? string.Empty : " (" + response.Response + ")")
-            };
+            return response;
         }
         if (response.DataSize != data.Length)
         {

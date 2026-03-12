@@ -3,6 +3,7 @@ namespace FirmwareKit.Comm.Fastboot;
 public static class FastbootDebug
 {
     private static bool? _debugEnabled;
+    public static Action<string>? Output;
 
     public static bool IsEnabled
     {
@@ -21,7 +22,7 @@ public static class FastbootDebug
     {
         if (IsEnabled)
         {
-            Console.Error.WriteLine($"[DEBUG] {message}");
+            Output?.Invoke(message);
         }
     }
 }
