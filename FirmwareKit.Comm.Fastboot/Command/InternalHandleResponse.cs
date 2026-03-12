@@ -112,12 +112,14 @@ public partial class FastbootDriver
             {
                 response.Result = FastbootState.Timeout;
                 response.Response = "status read timeout (121)";
+                FastbootDebug.Log($"Response(Timeout)");
                 return response;
             }
             catch (Exception e)
             {
                 response.Result = FastbootState.Fail;
                 response.Response = "status read failed: " + e.Message;
+                FastbootDebug.Log($"Response(Fail)");
                 return response;
             }
 
@@ -158,6 +160,7 @@ public partial class FastbootDriver
 
                     response.Result = FastbootState.Unknown;
                     response.Response = "device sent unknown status code: " + pendingStatus.Substring(pendingOffset);
+                    FastbootDebug.Log($"Response(Unknown)");
                     return response;
                 }
 
@@ -176,6 +179,7 @@ public partial class FastbootDriver
                         response.Text = textBuffer.ToString();
                     }
                     response.Response = content;
+                    FastbootDebug.Log($"Response(Success)");
                     return response;
                 }
                 else if (isFail)
@@ -187,6 +191,7 @@ public partial class FastbootDriver
                         response.Text = textBuffer.ToString();
                     }
                     response.Response = content;
+                    FastbootDebug.Log($"Response(Fail)");
                     return response;
                 }
                 else if (isInfo || isText)
@@ -234,6 +239,7 @@ public partial class FastbootDriver
                     {
                         response.Result = FastbootState.Fail;
                         response.Response = "data size malformed: " + dataHex;
+                        FastbootDebug.Log($"Response(Fail)");
                         return response;
                     }
 
@@ -243,6 +249,7 @@ public partial class FastbootDriver
                         {
                             response.Result = FastbootState.Fail;
                             response.Response = "data size malformed: " + dataHex;
+                            FastbootDebug.Log($"Response(Fail)");
                             return response;
                         }
                     }
@@ -251,6 +258,7 @@ public partial class FastbootDriver
                     {
                         response.Result = FastbootState.Fail;
                         response.Response = "data size malformed: " + dataHex;
+                        FastbootDebug.Log($"Response(Fail)");
                         return response;
                     }
 
@@ -258,6 +266,7 @@ public partial class FastbootDriver
                     {
                         response.Result = FastbootState.Fail;
                         response.Response = "data size too large " + dsize;
+                        FastbootDebug.Log($"Response(Fail)");
                         return response;
                     }
 
@@ -267,11 +276,13 @@ public partial class FastbootDriver
                     {
                         response.Text = textBuffer.ToString();
                     }
+                    FastbootDebug.Log($"Response(Data)");
                     return response;
                 }
             }
         }
         response.Result = FastbootState.Timeout;
+        FastbootDebug.Log($"Response(Timeout)");
         return response;
     }
 

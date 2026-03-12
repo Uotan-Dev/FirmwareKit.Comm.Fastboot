@@ -1,7 +1,6 @@
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
-using FirmwareKit.Sparse.Core;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -162,19 +161,31 @@ public partial class FastbootDriver : IDisposable
 
     public void NotifyCurrentStep(string step)
     {
-        // Suppress detailed step notifications during flashing
-        if (step.StartsWith("Sending sparse image") || step.StartsWith("Flashing"))
+        FastbootDebug.Log($"NotifyCurrentStep(step={step})");
+
+        // by default write progress messages similar to the AOSP fastboot tool
+        if (string.IsNullOrEmpty(step) == false &&
+            (CurrentStepChanged == null || CurrentStepChanged.GetInvocationList().Length == 0))
         {
-            return;
+            // official fastboot prints the status text directly, no prefix
+            Console.Error.WriteLine(step);
         }
 
-        FastbootDebug.Log($"NotifyCurrentStep(step={step})");
         CurrentStepChanged?.Invoke(this, step);
     }
+
     public void NotifyProgress(long current, long total)
     {
         FastbootDebug.Log($"NotifyProgress(current={current}, total={total})");
         DataTransferProgressChanged?.Invoke(this, (current, total));
+
+        // if nobody is handling progress events we still print a basic line
+        if (DataTransferProgressChanged == null || DataTransferProgressChanged.GetInvocationList().Length == 0)
+        {
+            int percent = total > 0 ? (int)(current * 100 / total) : 0;
+            Console.Error.Write($"\r{current}/{total} {percent}%    ");
+            if (current == total) Console.Error.WriteLine();
+        }
     }
     public void NotifyReceived(FastbootState state, string? info = null, string? text = null)
     {

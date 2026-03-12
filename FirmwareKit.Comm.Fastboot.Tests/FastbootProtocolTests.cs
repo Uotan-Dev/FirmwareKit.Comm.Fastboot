@@ -1,5 +1,6 @@
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Sparse.Core;
+using FirmwareKit.Sparse.Models;
 using System.Globalization;
 using System.Text;
 
@@ -191,6 +192,78 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             }
 
             public void Dispose() { }
+        }
+
+        private sealed class MultiPartDownloadCaptureTransport : IFastbootTransport
+        {
+            private readonly Dictionary<string, string> _responses;
+            private readonly Queue<byte[]> _readQueue = new();
+            private MemoryStream? _currentPayload;
+            private int _pendingDownloadBytes;
+
+            public List<string> Commands { get; } = new();
+            public List<byte[]> DownloadPayloads { get; } = new();
+
+            public MultiPartDownloadCaptureTransport(Dictionary<string, string>? responses = null)
+            {
+                _responses = responses ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            public byte[] Read(int length)
+            {
+                if (_readQueue.Count == 0)
+                {
+                    return Encoding.UTF8.GetBytes("OKAY");
+                }
+
+                return _readQueue.Dequeue();
+            }
+
+            public long Write(byte[] data, int length)
+            {
+                if (_pendingDownloadBytes > 0)
+                {
+                    _currentPayload ??= new MemoryStream();
+                    _currentPayload.Write(data, 0, length);
+                    _pendingDownloadBytes -= length;
+                    if (_pendingDownloadBytes <= 0)
+                    {
+                        DownloadPayloads.Add(_currentPayload.ToArray());
+                        _currentPayload.Dispose();
+                        _currentPayload = null;
+                        _readQueue.Enqueue(Encoding.UTF8.GetBytes("OKAY"));
+                    }
+
+                    return length;
+                }
+
+                string command = Encoding.UTF8.GetString(data, 0, length);
+                Commands.Add(command);
+
+                if (command.StartsWith("download:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string hex = command.Substring("download:".Length);
+                    int size = int.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                    _pendingDownloadBytes = size;
+                    _currentPayload = new MemoryStream(size);
+                    _readQueue.Enqueue(Encoding.UTF8.GetBytes($"DATA{size:x8}"));
+                    return length;
+                }
+
+                if (_responses.TryGetValue(command, out string? response))
+                {
+                    _readQueue.Enqueue(Encoding.UTF8.GetBytes(response));
+                    return length;
+                }
+
+                _readQueue.Enqueue(Encoding.UTF8.GetBytes("OKAY"));
+                return length;
+            }
+
+            public void Dispose()
+            {
+                _currentPayload?.Dispose();
+            }
         }
 
         private sealed class NonSeekableStream : Stream
@@ -409,6 +482,23 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         }
 
         [Fact]
+        public void DownloadDataStream_Retry_WhenDownloadHandshakeIsNotData()
+        {
+            var transport = new MockTransport();
+            transport.EnqueueResponse("OKAYno");
+            transport.EnqueueResponse("OKAY");
+            transport.EnqueueResponse("DATA00000004");
+            transport.EnqueueResponse("OKAY");
+            var util = new FastbootDriver(transport);
+
+            using var stream = new MemoryStream(new byte[] { 0x01, 0x02, 0x03, 0x04 });
+            var response = util.DownloadData(stream, 4);
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.True(transport.Commands.Count(c => c == "download:00000004") >= 2);
+        }
+
+        [Fact]
         public void DownloadDataStream_NonSeekable_DoesNotRetry()
         {
             var transport = new RetryAwareDownloadCaptureTransport(failFirstPayloadWrite: true);
@@ -618,6 +708,107 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         }
 
         [Fact]
+        public void FlashUnsparseImage_JustUnderLimit_UsesRaw()
+        {
+            // size one byte less than max-download-size (0x40 from protocol stub)
+            byte[] imageBytes = new byte[0x3F];
+            var transport = new ProtocolDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["getvar:has-slot:boot"] = "OKAYno",
+                ["getvar:is-logical:boot"] = "OKAYno",
+                ["getvar:max-download-size"] = "OKAY0x40",
+                ["flash:boot"] = "OKAY"
+            });
+            var util = new FastbootDriver(transport);
+            using var stream = new MemoryStream(imageBytes);
+
+            var response = util.FlashUnsparseImage("boot", stream, stream.Length);
+            Assert.Equal(FastbootState.Success, response.Result);
+
+            // ensure downloaded payload matches original bytes and not a sparse header
+            var payload = transport.DownloadPayload.ToArray();
+            Assert.Equal(imageBytes.Length, payload.Length);
+            Assert.NotEqual(0xed, payload[0]); // first byte of sparse magic is 0x3a? actually magic is 0xed26ff3a; just ensure not starting with ED
+        }
+
+        [Fact]
+        public void FlashUnsparseImage_ExactLimit_CompressesIfNeeded()
+        {
+            // image equal to limit - will trigger sparse conversion because size > max
+            byte[] imageBytes = new byte[0x41];
+            // put some zeros to make sparse compressible
+            for (int i = 1; i < imageBytes.Length; i++) imageBytes[i] = 0;
+
+            var transport = new ProtocolDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["getvar:has-slot:boot"] = "OKAYno",
+                ["getvar:is-logical:boot"] = "OKAYno",
+                ["getvar:max-download-size"] = "OKAY0x40",
+                ["flash:boot"] = "OKAY"
+            });
+            var util = new FastbootDriver(transport);
+            using var stream = new MemoryStream(imageBytes);
+
+            var response = util.FlashUnsparseImage("boot", stream, stream.Length);
+            Assert.Equal(FastbootState.Success, response.Result);
+
+            var payload = transport.DownloadPayload.ToArray();
+            // sparse images always start with the 32‑bit magic value 0xED26FF3A
+            // the header is written little‑endian so first four bytes should be 3A FF 26 ED
+            Assert.True(payload.Length >= 4);
+            Assert.Equal(0x3a, payload[0]);
+            Assert.Equal(0xff, payload[1]);
+            Assert.Equal(0x26, payload[2]);
+            Assert.Equal(0xed, payload[3]);
+        }
+
+        [Fact]
+        public void NotifyCurrentStep_DefaultWritesToConsole()
+        {
+            var util = new FastbootDriver(new ProtocolDownloadCaptureTransport());
+            using var err = new StringWriter();
+            var orig = Console.Error;
+            Console.SetError(err);
+            util.NotifyCurrentStep("example step");
+            Console.SetError(orig);
+
+            string output = err.ToString();
+            Assert.Contains("example step", output);
+        }
+
+        [Fact]
+        public void NotifyProgress_DefaultWritesToConsole()
+        {
+            var util = new FastbootDriver(new ProtocolDownloadCaptureTransport());
+            using var err = new StringWriter();
+            var orig = Console.Error;
+            Console.SetError(err);
+            util.NotifyProgress(50, 200);
+            Console.SetError(orig);
+
+            string output = err.ToString();
+            Assert.Contains("50/200", output);
+            Assert.Contains("25%", output);
+        }
+
+        [Fact]
+        public void Progress_WithHandler_DoesNotDoublePrint()
+        {
+            var util = new FastbootDriver(new ProtocolDownloadCaptureTransport());
+            bool called = false;
+            util.DataTransferProgressChanged += (s, e) => called = true;
+
+            using var err = new StringWriter();
+            var orig = Console.Error;
+            Console.SetError(err);
+            util.NotifyProgress(1, 1);
+            Console.SetError(orig);
+
+            Assert.True(called);
+            Assert.Equal(string.Empty, err.ToString());
+        }
+
+        [Fact]
         public void FlashSparseFile_TinyLimit_FallsBackToSingleSparseTransfer()
         {
             var transport = new ProtocolDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -634,6 +825,35 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Assert.Equal(FastbootState.Success, response.Result);
             Assert.Contains(transport.Commands, c => c.StartsWith("download:", StringComparison.OrdinalIgnoreCase));
             Assert.Contains("flash:boot", transport.Commands);
+        }
+
+        [Fact]
+        public void FlashSparseFile_Multipart_PreservesOriginalTotalBlocksInEachSparseHeader()
+        {
+            var transport = new MultiPartDownloadCaptureTransport(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["flash:system_a"] = "OKAY"
+            });
+            var util = new FastbootDriver(transport);
+
+            using var sparse = new SparseFile(4096, 3 * 1024 * 1024);
+            sparse.AddRawChunk(new byte[1536 * 1024]);
+            sparse.AddDontCareChunk(512 * 1024);
+            sparse.AddRawChunk(new byte[1024 * 1024]);
+
+            uint originalTotalBlocks = sparse.Header.TotalBlocks;
+
+            var response = util.FlashSparseFile("system_a", sparse, 1024 * 1024);
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.True(transport.DownloadPayloads.Count > 1);
+
+            foreach (var payload in transport.DownloadPayloads)
+            {
+                Assert.True(payload.Length >= SparseFormat.SparseHeaderSize);
+                var header = SparseHeader.FromBytes(payload.AsSpan(0, SparseFormat.SparseHeaderSize));
+                Assert.Equal(originalTotalBlocks, header.TotalBlocks);
+            }
         }
     }
 }

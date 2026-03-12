@@ -79,7 +79,10 @@ public partial class FastbootDriver
         // AOSP uses %08" PRIx32 which is 8 chars hex with leading zeros
         FastbootResponse response = RawCommand("download:" + length.ToString("x8"));
         if (response.Result != FastbootState.Data)
-            return response;
+        {
+            throw new Exception("protocol error: expected DATA response to download command, got " + response.Result +
+                (string.IsNullOrEmpty(response.Response) ? string.Empty : " (" + response.Response + ")"));
+        }
         if (response.DataSize != length)
         {
             return new FastbootResponse

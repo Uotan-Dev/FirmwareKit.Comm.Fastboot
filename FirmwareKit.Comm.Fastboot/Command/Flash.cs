@@ -42,6 +42,9 @@ public partial class FastbootDriver
             ResizeLogicalPartition(partition, imageSize);
         }
 
+        // log sizes so that callers can understand why we convert to sparse
+        FastbootDebug.Log($"FlashUnsparseImage: imageSize={imageSize}, maxDownloadSize={maxDownloadSize}, isSparse={isSparse}");
+
         if (isSparse)
         {
             NotifyCurrentStep($"Flashing sparse image to {partition}...");
@@ -49,6 +52,7 @@ public partial class FastbootDriver
             return FlashSparseFile(partition, sparseImage, maxDownloadSize);
         }
 
+        // Only send raw if the image will fit in a single transfer
         if (imageSize <= maxDownloadSize)
         {
             if (canSeek) stream.Seek(originalPosition, SeekOrigin.Begin);
