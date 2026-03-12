@@ -1,6 +1,7 @@
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
+using FirmwareKit.Sparse.Core;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -161,6 +162,12 @@ public partial class FastbootDriver : IDisposable
 
     public void NotifyCurrentStep(string step)
     {
+        // Suppress detailed step notifications during flashing
+        if (step.StartsWith("Sending sparse image") || step.StartsWith("Flashing"))
+        {
+            return;
+        }
+
         FastbootDebug.Log($"NotifyCurrentStep(step={step})");
         CurrentStepChanged?.Invoke(this, step);
     }
@@ -538,8 +545,51 @@ public partial class FastbootDriver : IDisposable
     /// </summary>
     public void FlashImage(string partition, string filePath, string? slotOverride = null)
     {
-        FastbootDebug.Log($"FlashImage(partition={partition}, file={filePath}, slot={slotOverride ?? "null"})");
+        FlashImage(partition, filePath, slotOverride, false, null);
+
+    }
+
+    /// <summary>
+    /// 支持 super 优化开关和分段输出回调的重载
+    /// </summary>
+    public void FlashImage(string partition, string filePath, string? slotOverride, bool disableSuperOptimization, Action<string>? progressCallback)
+    {
+        FastbootDebug.Log($"FlashImage(partition={partition}, file={filePath}, slot={slotOverride ?? "null"}, disableSuperOptimization={disableSuperOptimization})");
         if (!File.Exists(filePath)) throw new FileNotFoundException(filePath);
+
+        if (partition.Equals("super", StringComparison.OrdinalIgnoreCase))
+        {
+            string? dir = Path.GetDirectoryName(filePath);
+            string emptyPath = dir != null ? Path.Combine(dir, "super_empty.img") : "super_empty.img";
+            if (!disableSuperOptimization && File.Exists(emptyPath) && IsUserspace())
+            {
+                progressCallback?.Invoke($"[super] Optimizing super partition flash (AOSP style)...");
+                var helper = new SuperFlashHelper(this, "super", emptyPath);
+                var imgDir = dir ?? ".";
+                var imgFiles = Directory.GetFiles(imgDir, "*.img");
+                var mergedParts = new List<string>();
+                foreach (var img in imgFiles)
+                {
+                    var partName = Path.GetFileNameWithoutExtension(img);
+                    if (IsLogicalOptimized(partName))
+                    {
+                        helper.AddPartition(partName, img);
+                        mergedParts.Add(partName);
+                    }
+                }
+                if (mergedParts.Count > 0)
+                {
+                    progressCallback?.Invoke($"[super] Merged logical partitions: {string.Join(", ", mergedParts)}");
+                }
+                helper.Flash();
+                progressCallback?.Invoke($"[super] Flash complete. (Optimized super flash)");
+                return;
+            }
+            else if (disableSuperOptimization)
+            {
+                progressCallback?.Invoke($"[super] Super optimization disabled, will flash logical partitions separately if needed.");
+            }
+        }
 
         string targetPartition = partition;
         if (slotOverride == "all")

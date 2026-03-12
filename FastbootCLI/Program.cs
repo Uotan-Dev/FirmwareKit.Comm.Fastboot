@@ -10,7 +10,6 @@ namespace FastbootCLI
         private static string? slot = null;
         private static bool wipeUserdata = false;
         private static bool skipReboot = false;
-        private static bool force = false;
         private static string? fsOptions = null;
         private static long? sparseLimit = null;
 
@@ -36,7 +35,6 @@ namespace FastbootCLI
                 }
                 else if (arg == "-w") wipeUserdata = true;
                 else if (arg == "--skip-reboot") skipReboot = true;
-                else if (arg == "--force") force = true;
                 else if (arg == "--fs-options" && i < args.Length) fsOptions = args[i++];
                 else if (arg == "-S" && i < args.Length)
                 {
@@ -441,7 +439,6 @@ namespace FastbootCLI
             Console.Error.WriteLine("                                 it will set the inactive slot to active.");
             Console.Error.WriteLine("  -S <size>[k|m|g]               Break into sparse files no larger than SIZE.");
             Console.Error.WriteLine("  --skip-reboot                  Don't reboot device after flashing all.");
-            Console.Error.WriteLine("  --force                        Force execute command (e.g. skip snapshot check).");
             Console.Error.WriteLine("  --fs-options <opt>             File system options for format (e.g. casefold).");
             Console.Error.WriteLine("  --fallback                     Use platform native USB backend instead of libusb (on Linux libusb is default).");
 

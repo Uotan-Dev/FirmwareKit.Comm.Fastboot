@@ -18,7 +18,7 @@ public partial class FastbootDriver
         List<SparseFile> parts;
         try
         {
-            parts = sparseFile.Resparse(limit);
+            parts = sparseFile.Resparse(limit).ToList();
         }
         catch (InvalidOperationException)
         {
