@@ -21,8 +21,14 @@ jobs:
           - os: windows-latest
             rid: win-x86
             ext: .exe
+          - os: windows-latest
+            rid: win-arm64
+            ext: .exe
           - os: ubuntu-latest
             rid: linux-x64
+            ext: ""
+          - os: ubuntu-latest
+            rid: linux-arm64
             ext: ""
           - os: macos-latest
             rid: osx-x64
@@ -41,7 +47,7 @@ jobs:
 
       - name: Publish AOT
         run: |
-          dotnet publish FastbootCLI/FastbootCLI.csproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -p:OptimizationPreference=Size -o ./publish/${{ matrix.rid }}
+          dotnet publish FastbootCLI/FastbootCLI.csproj -c Release -r ${{ matrix.rid }} -o ./publish/${{ matrix.rid }} --self-contained
 
       - name: Zip Artifacts
         shell: pwsh
