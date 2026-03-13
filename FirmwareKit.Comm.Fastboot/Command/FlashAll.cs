@@ -54,8 +54,19 @@ public partial class FastbootDriver
             if (File.Exists(img))
             {
                 NotifyCurrentStep($"Flashing {p}...");
-                using var fs = File.OpenRead(img);
-                FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                bool success = false;
+                try
+                {
+                    using var fs = File.OpenRead(img);
+                    FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+                    success = true;
+                }
+                finally
+                {
+                    sw.Stop();
+                    OnStepFinished?.Invoke($"Flashing {p}", sw.Elapsed, success);
+                }
             }
         }
 
@@ -77,12 +88,24 @@ public partial class FastbootDriver
             if (File.Exists(img))
             {
                 NotifyCurrentStep($"Flashing {p}...");
-                using var fs = File.OpenRead(img);
-                FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                bool success = false;
+                try
+                {
+                    using var fs = File.OpenRead(img);
+                    FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+                    success = true;
+                }
+                finally
+                {
+                    sw.Stop();
+                    OnStepFinished?.Invoke($"Flashing {p}", sw.Elapsed, success);
+                }
             }
         }
 
         NotifyCurrentStep("Flash completed.");
+        OnStepFinished?.Invoke("Flash completed", TimeSpan.Zero, true);
     }
 
     private void FlashDynamicPartitions(string directory, string superEmptyPath)
@@ -125,8 +148,19 @@ public partial class FastbootDriver
                 if (File.Exists(img))
                 {
                     string target = p + (GetVar("slot-suffix") ?? "");
-                    using var fs = File.OpenRead(img);
-                    FlashUnsparseImage(target, fs, fs.Length).ThrowIfError();
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    bool success = false;
+                    try
+                    {
+                        using var fs = File.OpenRead(img);
+                        FlashUnsparseImage(target, fs, fs.Length).ThrowIfError();
+                        success = true;
+                    }
+                    finally
+                    {
+                        sw.Stop();
+                        OnStepFinished?.Invoke($"Flashing {target}", sw.Elapsed, success);
+                    }
                 }
             }
         }

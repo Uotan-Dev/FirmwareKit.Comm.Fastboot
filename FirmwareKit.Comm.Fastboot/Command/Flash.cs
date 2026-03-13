@@ -45,34 +45,50 @@ public partial class FastbootDriver
         // log sizes so that callers can understand why we convert to sparse
         FastbootDebug.Log($"FlashUnsparseImage: imageSize={imageSize}, maxDownloadSize={maxDownloadSize}, isSparse={isSparse}");
 
-        if (isSparse)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        bool success = false;
+        try
         {
-            NotifyCurrentStep($"Flashing sparse image to {partition}...");
-            using var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false);
-            return FlashSparseFile(partition, sparseImage, maxDownloadSize);
-        }
-
-        // Only send raw if the image will fit in a single transfer
-        if (imageSize <= maxDownloadSize)
-        {
-            if (canSeek) stream.Seek(originalPosition, SeekOrigin.Begin);
-            return FlashRawImage(partition, stream, imageSize);
-        }
-
-        if (!canSeek)
-        {
-            return new FastbootResponse
+            if (isSparse)
             {
-                Result = FastbootState.Fail,
-                Response = "raw image exceeds max-download-size and requires a seekable stream for sparse conversion"
-            };
-        }
+                NotifyCurrentStep($"Flashing sparse image to {partition}...");
+                using var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false);
+                var resp = FlashSparseFile(partition, sparseImage, maxDownloadSize);
+                success = resp.Result == FastbootState.Success;
+                return resp;
+            }
 
-        NotifyCurrentStep($"Converting large raw image to sparse chunks for {partition}...");
-        stream.Seek(originalPosition, SeekOrigin.Begin);
-        using (var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false))
+            // Only send raw if the image will fit in a single transfer
+            if (imageSize <= maxDownloadSize)
+            {
+                if (canSeek) stream.Seek(originalPosition, SeekOrigin.Begin);
+                var resp = FlashRawImage(partition, stream, imageSize);
+                success = resp.Result == FastbootState.Success;
+                return resp;
+            }
+
+            if (!canSeek)
+            {
+                return new FastbootResponse
+                {
+                    Result = FastbootState.Fail,
+                    Response = "raw image exceeds max-download-size and requires a seekable stream for sparse conversion"
+                };
+            }
+
+            NotifyCurrentStep($"Converting large raw image to sparse chunks for {partition}...");
+            stream.Seek(originalPosition, SeekOrigin.Begin);
+            using (var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false))
+            {
+                var resp = FlashSparseFile(partition, sparseImage, maxDownloadSize);
+                success = resp.Result == FastbootState.Success;
+                return resp;
+            }
+        }
+        finally
         {
-            return FlashSparseFile(partition, sparseImage, maxDownloadSize);
+            sw.Stop();
+            OnStepFinished?.Invoke($"Flash {partition}", sw.Elapsed, success);
         }
     }
 

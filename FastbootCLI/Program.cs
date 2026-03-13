@@ -160,6 +160,15 @@ namespace FastbootCLI
                 if (!string.IsNullOrEmpty(step)) Console.Error.WriteLine(step);
             };
 
+            var stepResults = new List<(string Step, TimeSpan Duration, bool Success)>();
+            util.OnStepFinished = (step, duration, success) =>
+            {
+                if (step.StartsWith("Flash") || step.StartsWith("Flashing"))
+                {
+                    stepResults.Add((step, duration, success));
+                }
+            };
+
             foreach (var cmd in pendingCommands)
             {
                 try
@@ -172,6 +181,14 @@ namespace FastbootCLI
                     if (FastbootDebug.IsEnabled) Console.Error.WriteLine("[DEBUG] Exception: " + ex);
                     Console.Error.WriteLine("fastboot: error: " + ex.Message);
                     Environment.Exit(1);
+                }
+            }
+
+            if (pendingCommands.Any(c => c.Command is "flash" or "flashall" or "update"))
+            {
+                foreach (var (step, duration, success) in stepResults)
+                {
+                    Console.Error.WriteLine($"{step,-30} {(success ? "Success" : "Failed"),-4} Time: {duration.TotalSeconds:F2} s");
                 }
             }
         }
@@ -203,13 +220,6 @@ namespace FastbootCLI
                 ExecuteDeviceList(args);
                 return;
             }
-
-            util.DataTransferProgressChanged += (s, e) =>
-            {
-                int percent = (int)(e.Item1 * 100 / e.Item2);
-                Console.Error.Write($"\r{command} ({e.Item1}/{e.Item2}) {percent}%    ");
-                if (e.Item1 == e.Item2) Console.Error.WriteLine();
-            };
 
             if (wipeUserdata && (command == "flashall" || command == "update"))
             {

@@ -9,6 +9,11 @@ namespace FirmwareKit.Comm.Fastboot;
 
 public partial class FastbootDriver : IDisposable
 {
+    /// <summary>
+    /// 回调：每个烧录步骤完成时触发，参数为（步骤名，耗时，是否成功）
+    /// </summary>
+    public Action<string, TimeSpan, bool>? OnStepFinished { get; set; }
+
     public void Dispose()
     {
         FastbootDebug.Log($"Dispose()");

@@ -51,16 +51,21 @@ public partial class FastbootDriver
 
             if (blockCount == 0)
             {
-                // Keep compatibility with previous fallback behavior when limit is unrealistically small.
                 if (partIndex == 0 && startBlock == 0)
                 {
                     using var singleSparseStream = new SparseImageStream(sparseFile, 0, totalBlocks, includeCrc: false, fullRange: true, disposeSource: false);
                     long singleLength = singleSparseStream.Length;
+                    var swSingle = System.Diagnostics.Stopwatch.StartNew();
                     var singleDownload = DownloadData(singleSparseStream, singleLength);
+                    swSingle.Stop();
+                    OnStepFinished?.Invoke($"Flash {partition} (single)", swSingle.Elapsed, singleDownload.Result == FastbootState.Success);
                     if (singleDownload.Result != FastbootState.Success)
                         return singleDownload;
                     NotifyCurrentStep($"Flashing {partition} (single)...");
+                    var swFlash = System.Diagnostics.Stopwatch.StartNew();
                     last = RawCommand("flash:" + partition);
+                    swFlash.Stop();
+                    OnStepFinished?.Invoke($"Flash {partition} (single) commit", swFlash.Elapsed, last.Result == FastbootState.Success);
                     if (last.Result != FastbootState.Success)
                         return last;
                     return last;
@@ -77,14 +82,20 @@ public partial class FastbootDriver
             using var sparseStream = new SparseImageStream(sparseFile, startBlock, blockCount, includeCrc: false, fullRange: true, disposeSource: false);
             long sparseLength = sparseStream.Length;
 
+            var swDownload = System.Diagnostics.Stopwatch.StartNew();
             var download = DownloadData(sparseStream, sparseLength);
+            swDownload.Stop();
+            OnStepFinished?.Invoke($"Flash {partition} block {partIndex + 1} download", swDownload.Elapsed, download.Result == FastbootState.Success);
             if (download.Result != FastbootState.Success)
             {
                 return download;
             }
 
             NotifyCurrentStep($"Flashing {partition} ({partIndex + 1})...");
+            var swFlashBlock = System.Diagnostics.Stopwatch.StartNew();
             last = RawCommand("flash:" + partition);
+            swFlashBlock.Stop();
+            OnStepFinished?.Invoke($"Flash {partition} block {partIndex + 1} commit", swFlashBlock.Elapsed, last.Result == FastbootState.Success);
             if (last.Result != FastbootState.Success)
             {
                 return last;
