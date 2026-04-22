@@ -471,7 +471,7 @@ public partial class FastbootDriver : IDisposable
     /// <summary>
     /// Flashes ZIP firmware package (corresponding to fastboot update)
     /// </summary>
-    public void FlashZip(string zipPath, bool skipValidation = false, bool wipe = false)
+    public void FlashZip(string zipPath, bool skipValidation = false, bool wipe = false, bool disableVerity = false, bool disableVerification = false)
     {
         CancelSnapshotIfNeeded();
         DumpInfo();
@@ -485,7 +485,7 @@ public partial class FastbootDriver : IDisposable
             ZipFile.ExtractToDirectory(zipPath, tempDir);
 
             // Reuse FlashAll logic, it will automatically handle fastboot-info.txt, optimization of super partition, and verification
-            FlashAll(tempDir, wipe, false, skipValidation);
+            FlashAll(tempDir, wipe, false, skipValidation, true, disableVerity, disableVerification);
         }
         finally
         {
@@ -497,20 +497,21 @@ public partial class FastbootDriver : IDisposable
     {
         string? sizeStr = null;
         try { sizeStr = GetVar("max-download-size"); } catch { }
-        if (string.IsNullOrEmpty(sizeStr)) return SparseMaxDownloadSize;
+        if (sizeStr == null || sizeStr.Length == 0) return SparseMaxDownloadSize;
+        string normalizedSize = sizeStr;
 
         long parsedSize;
 
-        if (sizeStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        if (normalizedSize.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
         {
-            if (!long.TryParse(sizeStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out parsedSize))
+            if (!long.TryParse(normalizedSize.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out parsedSize))
             {
                 return SparseMaxDownloadSize;
             }
         }
         else
         {
-            if (!long.TryParse(sizeStr, out parsedSize))
+            if (!long.TryParse(normalizedSize, out parsedSize))
             {
                 return SparseMaxDownloadSize;
             }
@@ -1185,7 +1186,7 @@ public partial class FastbootDriver : IDisposable
     /// <summary>
     /// Executes fastboot-info.txt commands
     /// </summary>
-    public void FlashFromInfo(string infoContent, string imageDir, bool wipe = false, string? slotOverride = null, bool optimizeSuper = true)
+    public void FlashFromInfo(string infoContent, string imageDir, bool wipe = false, string? slotOverride = null, bool optimizeSuper = true, bool disableVerity = false, bool disableVerification = false)
     {
         NotifyCurrentStep("Parsing fastboot-info.txt...");
         var lines = infoContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -1275,7 +1276,7 @@ public partial class FastbootDriver : IDisposable
                         NotifyCurrentStep($"WARNING: Unsupported fastboot-info.txt version: {args[0]}");
                     break;
                 case "flash":
-                    ExecuteFlashTaskFromInfo(args, imageDir, currentSlot, otherSlot);
+                    ExecuteFlashTaskFromInfo(args, imageDir, currentSlot, otherSlot, disableVerity, disableVerification);
                     break;
                 case "erase":
                     if (args.Count > 0) ErasePartition(args[0]);
@@ -1304,7 +1305,7 @@ public partial class FastbootDriver : IDisposable
         return null;
     }
 
-    private void ExecuteFlashTaskFromInfo(List<string> args, string imageDir, string currentSlot, string otherSlot)
+    private void ExecuteFlashTaskFromInfo(List<string> args, string imageDir, string currentSlot, string otherSlot, bool disableVerity, bool disableVerification)
     {
         bool applyVbmeta = false;
         string targetSlot = currentSlot;
@@ -1335,7 +1336,7 @@ public partial class FastbootDriver : IDisposable
                 }
 
                 if (applyVbmeta || IsVbmetaPartition(partition))
-                    FlashVbmeta(partition, imgPath);
+                    FlashVbmeta(partition, imgPath, disableVerity, disableVerification);
                 else
                     FlashImage(partition, imgPath, targetSlot);
             }
@@ -1360,7 +1361,7 @@ public partial class FastbootDriver : IDisposable
     /// <summary>
     /// Executes FlashAll (in a specified directory, finding and flashing base partitions)
     /// </summary>
-    public void FlashAll(string productOutDir, bool wipe = false, bool skipSecondary = false, bool force = false, bool optimizeSuper = true)
+    public void FlashAll(string productOutDir, bool wipe = false, bool skipSecondary = false, bool force = false, bool optimizeSuper = true, bool disableVerity = false, bool disableVerification = false)
     {
         CancelSnapshotIfNeeded();
 
@@ -1370,7 +1371,7 @@ public partial class FastbootDriver : IDisposable
         if (File.Exists(infoPath))
         {
             NotifyCurrentStep("Using fastboot-info.txt for flashing...");
-            FlashFromInfo(File.ReadAllText(infoPath), productOutDir, wipe, null, optimizeSuper);
+            FlashFromInfo(File.ReadAllText(infoPath), productOutDir, wipe, null, optimizeSuper, disableVerity, disableVerification);
             if (wipe) WipeUserData();
             return;
         }
@@ -1415,12 +1416,12 @@ public partial class FastbootDriver : IDisposable
                 targetSlot = currentSlot == "a" ? "b" : "a";
                 isOther = true;
             }
-            if (IsVbmetaPartition(part)) FlashVbmeta(part, filePath);
+            if (IsVbmetaPartition(part)) FlashVbmeta(part, filePath, disableVerity, disableVerification);
             else FlashImage(part, filePath, targetSlot);
             if (!isOther && !skipSecondary && HasSlot(part))
             {
                 string otherSlot = currentSlot == "a" ? "b" : "a";
-                if (IsVbmetaPartition(part)) FlashVbmeta(part, filePath);
+                if (IsVbmetaPartition(part)) FlashVbmeta(part, filePath, disableVerity, disableVerification);
                 else FlashImage(part, filePath, otherSlot);
             }
 

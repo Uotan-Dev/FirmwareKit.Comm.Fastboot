@@ -10,6 +10,8 @@ namespace FastbootCLI
         private static string? slot = null;
         private static bool wipeUserdata = false;
         private static bool skipReboot = false;
+        private static bool disableVerity = false;
+        private static bool disableVerification = false;
         private static string? fsOptions = null;
         private static long? sparseLimit = null;
 
@@ -23,7 +25,16 @@ namespace FastbootCLI
             int i = 0;
             List<(string Command, List<string> Args)> pendingCommands = new List<(string, List<string>)>();
 
-            while (i < args.Length)
+            var commandSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "devices", "getvar", "reboot", "reboot-bootloader", "reboot-fastboot", "reboot-recovery",
+                "fetch", "flash", "flashall", "update", "flash:raw", "erase", "format", "set_active",
+                "oem", "flashing", "create-logical-partition", "delete-logical-partition", "resize-logical-partition",
+                "snapshot-update", "continue", "stage", "get_staged", "upload", "gsi", "wipe-super", "boot"
+            };
+
+            // Parse global options before the first command.
+            while (i < args.Length && args[i].StartsWith("-"))
             {
                 string arg = args[i++];
                 if (arg == "-s" && i < args.Length) serial = args[i++];
@@ -37,6 +48,8 @@ namespace FastbootCLI
                 else if (arg == "-w") wipeUserdata = true;
                 else if (arg == "--skip-reboot") skipReboot = true;
                 else if (arg == "--fs-options" && i < args.Length) fsOptions = args[i++];
+                else if (arg == "--disable-verity") disableVerity = true;
+                else if (arg == "--disable-verification") disableVerification = true;
                 else if (arg == "-S" && i < args.Length)
                 {
                     string sizeStr = args[i++];
@@ -46,19 +59,30 @@ namespace FastbootCLI
                 else if (arg == "--fallback") UsbManager.ForceLibUsb = false;
                 else if (arg == "--version" || arg == "version") { Console.Error.WriteLine("fastboot version 1.2.5"); return; }
                 else if (arg == "-h" || arg == "--help" || arg == "help") { ShowHelp(); return; }
-                else if (!arg.StartsWith("-"))
+                else
                 {
-                    // This is a command (like 'devices', 'flash', 'getvar')
-                    string command = arg;
-
-                    // Collect arguments for this specific command until next arg starting with '-'
-                    List<string> commandArgs = new List<string>();
-                    while (i < args.Length && !args[i].StartsWith("-"))
-                    {
-                        commandArgs.Add(args[i++]);
-                    }
-                    pendingCommands.Add((command, commandArgs));
+                    Console.Error.WriteLine("fastboot: error: Unknown option: " + arg);
+                    Environment.Exit(1);
+                    return;
                 }
+            }
+
+            while (i < args.Length)
+            {
+                string command = args[i++];
+                if (!commandSet.Contains(command))
+                {
+                    Console.Error.WriteLine("fastboot: error: Unknown command: " + command);
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var commandArgs = new List<string>();
+                while (i < args.Length && !commandSet.Contains(args[i]))
+                {
+                    commandArgs.Add(args[i++]);
+                }
+                pendingCommands.Add((command, commandArgs));
             }
 
             if (pendingCommands.Count == 0)
@@ -314,15 +338,18 @@ namespace FastbootCLI
                 case "flash":
                     if (args.Count == 0) throw new Exception("usage: fastboot flash [--disable-verity] [--disable-verification] <partition> [filename]");
 
-                    bool disableVerity = false;
-                    bool disableVerification = false;
+                    bool flashDisableVerity = false;
+                    bool flashDisableVerification = false;
                     var flashArgs = new List<string>();
                     foreach (var a in args)
                     {
-                        if (a == "--disable-verity") disableVerity = true;
-                        else if (a == "--disable-verification") disableVerification = true;
+                        if (a == "--disable-verity") flashDisableVerity = true;
+                        else if (a == "--disable-verification") flashDisableVerification = true;
                         else flashArgs.Add(a);
                     }
+
+                    flashDisableVerity |= Program.disableVerity;
+                    flashDisableVerification |= Program.disableVerification;
 
                     if (flashArgs.Count == 0) throw new Exception("usage: fastboot flash [--disable-verity] [--disable-verification] <partition> [filename]");
 
@@ -352,10 +379,10 @@ namespace FastbootCLI
                     }
 
                     bool isVbmeta = flashPartition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
-                    if (isVbmeta && (disableVerity || disableVerification))
+                    if (isVbmeta && (flashDisableVerity || flashDisableVerification))
                     {
                         string vbmetaTarget = GetPartition(flashPartition);
-                        util.FlashVbmeta(vbmetaTarget, flashFile, disableVerity, disableVerification).ThrowIfError();
+                        util.FlashVbmeta(vbmetaTarget, flashFile, flashDisableVerity, flashDisableVerification).ThrowIfError();
                     }
                     else
                     {
@@ -367,13 +394,13 @@ namespace FastbootCLI
                 case "flashall":
                     string? productOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
                     if (string.IsNullOrEmpty(productOut)) throw new Exception("ANDROID_PRODUCT_OUT not set. Please use: fastboot update ZIP");
-                    util.FlashFromDirectory(productOut);
+                    util.FlashFromDirectory(productOut, false, Program.disableVerity, Program.disableVerification);
                     if (!skipReboot) util.Reboot("");
                     break;
 
                 case "update":
                     if (args.Count == 0) throw new Exception("usage: fastboot update <zip>");
-                    util.FlashUpdateZip(args[0]);
+                    util.FlashUpdateZip(args[0], false, Program.disableVerity, Program.disableVerification);
                     if (!skipReboot) util.Reboot("");
                     break;
 
@@ -484,8 +511,7 @@ namespace FastbootCLI
                     break;
 
                 default:
-                    Console.Error.WriteLine("Command not implemented: " + command);
-                    break;
+                    throw new NotSupportedException("Command not implemented: " + command);
             }
         }
 
@@ -501,6 +527,8 @@ namespace FastbootCLI
             Console.Error.WriteLine("  -S <size>[k|m|g]               Break into sparse files no larger than SIZE.");
             Console.Error.WriteLine("  --skip-reboot                  Don't reboot device after flashing all.");
             Console.Error.WriteLine("  --fs-options <opt>             File system options for format (e.g. casefold).");
+            Console.Error.WriteLine("  --disable-verity               Disable dm-verity in vbmeta images.");
+            Console.Error.WriteLine("  --disable-verification         Disable AVB verification in vbmeta images.");
             Console.Error.WriteLine("  --fallback                     Use platform native USB backend instead of libusb (on Linux libusb is default).");
 
             Console.Error.WriteLine("\nbasics:");

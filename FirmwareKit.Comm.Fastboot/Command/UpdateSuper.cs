@@ -16,7 +16,15 @@ public partial class FastbootDriver
 
         var metadataReader = new MetadataReader();
         var metadataWriter = new MetadataWriter();
-        LpMetadata metadata = metadataReader.ReadFromImageFile(metadataPath);
+        LpMetadata metadata;
+        try
+        {
+            metadata = metadataReader.ReadFromImageFile(metadataPath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException($"Failed to parse super metadata image: {metadataPath}", ex);
+        }
         byte[] metadataBlob = metadataWriter.SerializeMetadata(metadata);
 
         NotifyCurrentStep($"Updating super metadata for {partition}");

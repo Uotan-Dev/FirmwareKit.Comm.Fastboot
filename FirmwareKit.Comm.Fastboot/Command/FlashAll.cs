@@ -11,7 +11,7 @@ public partial class FastbootDriver
     /// <summary>
     /// Performs a "flashall" operation from a standard AOSP update.zip
     /// </summary>
-    public void FlashUpdateZip(string zipPath, bool skipSecondary = false)
+    public void FlashUpdateZip(string zipPath, bool skipSecondary = false, bool disableVerity = false, bool disableVerification = false)
     {
         NotifyCurrentStep("Extracting update zip...");
         string tempDir = Path.Combine(Path.GetTempPath(), "fastboot_update_" + Path.GetRandomFileName());
@@ -19,7 +19,7 @@ public partial class FastbootDriver
         try
         {
             ZipFile.ExtractToDirectory(zipPath, tempDir);
-            FlashFromDirectory(tempDir, skipSecondary);
+            FlashFromDirectory(tempDir, skipSecondary, disableVerity, disableVerification);
         }
         finally
         {
@@ -30,7 +30,7 @@ public partial class FastbootDriver
     /// <summary>
     /// Performs a "flashall" operation from a directory containing AOSP images
     /// </summary>
-    public void FlashFromDirectory(string directory, bool skipSecondary = false)
+    public void FlashFromDirectory(string directory, bool skipSecondary = false, bool disableVerity = false, bool disableVerification = false)
     {
         string androidProductOut = directory;
         string infoPath = Path.Combine(androidProductOut, "android-info.txt");
@@ -58,8 +58,15 @@ public partial class FastbootDriver
                 bool success = false;
                 try
                 {
-                    using var fs = File.OpenRead(img);
-                    FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+                    if (IsVbmetaPartition(p))
+                    {
+                        FlashVbmeta(p, img, disableVerity, disableVerification).ThrowIfError();
+                    }
+                    else
+                    {
+                        using var fs = File.OpenRead(img);
+                        FlashUnsparseImage(p, fs, fs.Length).ThrowIfError();
+                    }
                     success = true;
                 }
                 finally
