@@ -29,10 +29,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\FirmwareKit.Comm\FirmwareKit.Comm\FirmwareKit.Comm.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Backend\Usb\Windows\**\*.cs" />
+    <Compile Remove="Backend\Usb\Linux\**\*.cs" />
+    <Compile Remove="Backend\Usb\macOS\**\*.cs" />
+    <Compile Remove="Backend\Usb\libusbdotnet\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Crc32.NET" Version="1.2.0" />
+    <PackageReference Include="FirmwareKit.Comm" Version="1.0.0" />
     <PackageReference Include="FirmwareKit.Lp" Version="1.0.0" />
     <PackageReference Include="FirmwareKit.Sparse" Version="1.0.2" />
-    <PackageReference Include="LibUsbDotNet" Version="3.0.167-alpha" />
   </ItemGroup>
 
 </Project>
