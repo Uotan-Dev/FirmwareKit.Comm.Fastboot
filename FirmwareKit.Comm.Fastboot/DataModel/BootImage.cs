@@ -4,6 +4,10 @@ using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
+/// <summary>
+/// Android boot image header version 0 (legacy format).
+/// <para>Android 启动镜像头版本 0（传统格式）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV0
 {
@@ -38,6 +42,10 @@ public struct BootImageHeaderV0
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1024)]
     public byte[] ExtraCmdline;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV0 with default ANDROID! magic.
+    /// <para>创建一个带有默认 ANDROID! 魔数的 BootImageHeaderV0。</para>
+    /// </summary>
     public static BootImageHeaderV0 Create()
     {
         return new BootImageHeaderV0
@@ -51,6 +59,10 @@ public struct BootImageHeaderV0
     }
 }
 
+/// <summary>
+/// Android boot image header version 1.
+/// <para>Android 启动镜像头版本 1。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV1
 {
@@ -87,6 +99,10 @@ public struct BootImageHeaderV1
 
     public uint HeaderSize;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV1 with default values.
+    /// <para>创建一个带有默认值的 BootImageHeaderV1。</para>
+    /// </summary>
     public static BootImageHeaderV1 Create()
     {
         return new BootImageHeaderV1
@@ -102,6 +118,10 @@ public struct BootImageHeaderV1
     }
 }
 
+/// <summary>
+/// Android boot image header version 2 (adds DTB support).
+/// <para>Android 启动镜像头版本 2（添加 DTB 支持）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV2
 {
@@ -141,6 +161,10 @@ public struct BootImageHeaderV2
     public uint DtbSize;
     public ulong DtbAddr;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV2 with default values.
+    /// <para>创建一个带有默认值的 BootImageHeaderV2。</para>
+    /// </summary>
     public static BootImageHeaderV2 Create()
     {
         return new BootImageHeaderV2
@@ -156,6 +180,10 @@ public struct BootImageHeaderV2
     }
 }
 
+/// <summary>
+/// Android boot image header version 3 (GKI format, no second stage).
+/// <para>Android 启动镜像头版本 3（GKI 格式，无第二阶段）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV3
 {
@@ -175,6 +203,10 @@ public struct BootImageHeaderV3
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1536)]
     public byte[] Cmdline;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV3 with default values.
+    /// <para>创建一个带有默认值的 BootImageHeaderV3。</para>
+    /// </summary>
     public static BootImageHeaderV3 Create()
     {
         return new BootImageHeaderV3
@@ -187,6 +219,10 @@ public struct BootImageHeaderV3
     }
 }
 
+/// <summary>
+/// Android boot image header version 4 (adds signature support).
+/// <para>Android 启动镜像头版本 4（添加签名支持）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV4
 {
@@ -208,6 +244,10 @@ public struct BootImageHeaderV4
 
     public uint SignatureSize;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV4 with default values.
+    /// <para>创建一个带有默认值的 BootImageHeaderV4。</para>
+    /// </summary>
     public static BootImageHeaderV4 Create()
     {
         return new BootImageHeaderV4
@@ -220,6 +260,10 @@ public struct BootImageHeaderV4
     }
 }
 
+/// <summary>
+/// Android boot image header version 5 (adds vendor bootconfig).
+/// <para>Android 启动镜像头版本 5（添加 vendor bootconfig）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV5
 {
@@ -242,6 +286,10 @@ public struct BootImageHeaderV5
     public uint SignatureSize;
     public uint VendorBootconfigSize;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV5 with default values.
+    /// <para>创建一个带有默认值的 BootImageHeaderV5。</para>
+    /// </summary>
     public static BootImageHeaderV5 Create()
     {
         return new BootImageHeaderV5
@@ -254,6 +302,10 @@ public struct BootImageHeaderV5
     }
 }
 
+/// <summary>
+/// Android boot image header version 6 (latest, adds reserved bytes).
+/// <para>Android 启动镜像头版本 6（最新，添加保留字节）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV6
 {
@@ -279,6 +331,10 @@ public struct BootImageHeaderV6
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Reserved1;
 
+    /// <summary>
+    /// Creates a new BootImageHeaderV6 with default values.
+    /// <para>创建一个带有默认值的 BootImageHeaderV6。</para>
+    /// </summary>
     public static BootImageHeaderV6 Create()
     {
         return new BootImageHeaderV6
@@ -291,6 +347,10 @@ public struct BootImageHeaderV6
     }
 }
 
+/// <summary>
+/// Vendor boot image header version 3.
+/// <para>Vendor 启动镜像头版本 3。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct VendorBootImageHeaderV3
 {
@@ -315,6 +375,10 @@ public struct VendorBootImageHeaderV3
     public uint DtbSize;
     public ulong DtbAddr;
 
+    /// <summary>
+    /// Creates a new VendorBootImageHeaderV3 with default values.
+    /// <para>创建一个带有默认值的 VendorBootImageHeaderV3。</para>
+    /// </summary>
     public static VendorBootImageHeaderV3 Create()
     {
         return new VendorBootImageHeaderV3
@@ -327,6 +391,10 @@ public struct VendorBootImageHeaderV3
     }
 }
 
+/// <summary>
+/// Vendor boot image header version 4 (adds vendor ramdisk table and bootconfig).
+/// <para>Vendor 启动镜像头版本 4（添加 vendor ramdisk 表和 bootconfig）。</para>
+/// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct VendorBootImageHeaderV4
 {
@@ -356,6 +424,10 @@ public struct VendorBootImageHeaderV4
     public uint VendorRamdiskTableEntrySize;
     public uint BootconfigSize;
 
+    /// <summary>
+    /// Creates a new VendorBootImageHeaderV4 with default values.
+    /// <para>创建一个带有默认值的 VendorBootImageHeaderV4。</para>
+    /// </summary>
     public static VendorBootImageHeaderV4 Create()
     {
         return new VendorBootImageHeaderV4
@@ -368,22 +440,73 @@ public struct VendorBootImageHeaderV4
     }
 }
 
+/// <summary>
+/// Represents an Android boot image with header and payload data (kernel, ramdisk, etc.).
+/// <para>表示包含头和负载数据（内核、ramdisk 等）的 Android 启动镜像。</para>
+/// </summary>
 public class BootImage
 {
+    /// <summary>
+    /// Gets or sets the boot image header (version-specific struct).
+    /// <para>获取或设置启动镜像头（特定版本的结构体）。</para>
+    /// </summary>
     public object Header { get; set; }
+
+    /// <summary>
+    /// Gets or sets the kernel data.
+    /// <para>获取或设置内核数据。</para>
+    /// </summary>
     public byte[] Kernel { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the ramdisk data.
+    /// <para>获取或设置 ramdisk 数据。</para>
+    /// </summary>
     public byte[] Ramdisk { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the second-stage loader data.
+    /// <para>获取或设置第二阶段加载器数据。</para>
+    /// </summary>
     public byte[] Second { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the device tree blob (DTB) data.
+    /// <para>获取或设置设备树 blob (DTB) 数据。</para>
+    /// </summary>
     public byte[] Dtb { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the signature data.
+    /// <para>获取或设置签名数据。</para>
+    /// </summary>
     public byte[] Signature { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the vendor ramdisk table data.
+    /// <para>获取或设置 vendor ramdisk 表数据。</para>
+    /// </summary>
     public byte[] VendorRamdiskTable { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the bootconfig data.
+    /// <para>获取或设置 bootconfig 数据。</para>
+    /// </summary>
     public byte[] Bootconfig { get; set; } = [];
 
+    /// <summary>
+    /// Initializes a new BootImage with the specified header.
+    /// <para>使用指定的头初始化新的 BootImage。</para>
+    /// </summary>
     public BootImage(object header)
     {
         Header = header;
     }
 
+    /// <summary>
+    /// Parses a boot image from a stream, auto-detecting the header version.
+    /// <para>从流解析启动镜像，自动检测头版本。</para>
+    /// </summary>
     public static BootImage Parse(Stream stream)
     {
         byte[] magic = new byte[8];
@@ -570,23 +693,39 @@ public class BootImage
         Bootconfig = ReadPadded(stream, offset, header.BootconfigSize, header.PageSize);
     }
 
+    /// <summary>
+    /// Gets the bootconfig content as a text string.
+    /// <para>以文本字符串形式获取 bootconfig 内容。</para>
+    /// </summary>
     public string GetBootconfigText()
     {
         if (Bootconfig == null || Bootconfig.Length == 0) return "";
         return Encoding.ASCII.GetString(Bootconfig).TrimEnd('\0');
     }
 
+    /// <summary>
+    /// Sets the bootconfig content from a text string.
+    /// <para>从文本字符串设置 bootconfig 内容。</para>
+    /// </summary>
     public void SetBootconfigText(string text)
     {
         Bootconfig = Encoding.ASCII.GetBytes(text + "\0");
     }
 
+    /// <summary>
+    /// Adds a key-value pair to the bootconfig.
+    /// <para>向 bootconfig 添加键值对。</para>
+    /// </summary>
     public void AddBootconfig(string key, string value)
     {
         string current = GetBootconfigText();
         SetBootconfigText(current + (string.IsNullOrEmpty(current) ? "" : "\n") + $"{key} = \"{value}\"");
     }
 
+    /// <summary>
+    /// Serializes the boot image to a stream, writing the header and all payload sections.
+    /// <para>将启动镜像序列化到流，写入头和所有负载段。</para>
+    /// </summary>
     public void Serialize(Stream stream)
     {
         if (Header is BootImageHeaderV0 h0)

@@ -7,8 +7,15 @@ namespace FirmwareKit.Comm.Fastboot;
 public partial class FastbootDriver
 {
     /// <summary>
-    /// Downloads data with retry and recovery
+    /// Downloads data from a stream to the device with retry and recovery support.
+    /// Supports seeking streams for automatic retry on failure. Includes CRC verification if the device supports it.
+    /// <para>从流将数据下载到设备，支持重试和恢复。
+    /// 支持查找流以便在故障时自动重试。如果设备支持，则包含 CRC 验证。</para>
     /// </summary>
+    /// <param name="stream">The data stream to download to the device. <para>要下载到设备的数据流。</para></param>
+    /// <param name="length">Number of bytes to download. <para>要下载的字节数。</para></param>
+    /// <param name="onEvent">If true, fires progress events during transfer. <para>如果为 true，则在传输期间触发进度事件。</param>
+    /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse DownloadData(Stream stream, long length, bool onEvent = true)
     {
         const int MaxRetries = 3;

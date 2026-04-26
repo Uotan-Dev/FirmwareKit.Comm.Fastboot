@@ -4,6 +4,10 @@ using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot.Network;
 
+/// <summary>
+/// Fastboot over TCP transport, implementing the AOSP TCP fastboot protocol with handshake.
+/// <para>基于 TCP 的 Fastboot 传输，实现 AOSP TCP fastboot 协议及握手。</para>
+/// </summary>
 public class TcpTransport : IFastbootBufferedTransport
 {
     private const int DefaultIoTimeoutMs = 30000;
@@ -14,9 +18,22 @@ public class TcpTransport : IFastbootBufferedTransport
     private NetworkStream? _stream;
     private long _messageBytesLeft = 0;
 
+    /// <summary>
+    /// Gets the host address of the TCP connection.
+    /// <para>获取 TCP 连接的主机地址。</para>
+    /// </summary>
     public string Host { get; }
+
+    /// <summary>
+    /// Gets the port number of the TCP connection.
+    /// <para>获取 TCP 连接的端口号。</para>
+    /// </summary>
     public int Port { get; }
 
+    /// <summary>
+    /// Initializes a new TcpTransport and performs the fastboot TCP handshake.
+    /// <para>初始化新的 TcpTransport 并执行 fastboot TCP 握手。</para>
+    /// </summary>
     public TcpTransport(string host, int port = 5554)
     {
         Host = host;
@@ -76,6 +93,10 @@ public class TcpTransport : IFastbootBufferedTransport
         return totalRead;
     }
 
+    /// <summary>
+    /// Reads data from the TCP transport with the specified maximum length.
+    /// <para>从 TCP 传输层读取指定最大长度的数据。</para>
+    /// </summary>
     public byte[] Read(int length)
     {
         if (length <= 0) return Array.Empty<byte>();
@@ -89,6 +110,10 @@ public class TcpTransport : IFastbootBufferedTransport
         return dataBuffer;
     }
 
+    /// <summary>
+    /// Reads data directly into the specified buffer for zero-allocation reads.
+    /// <para>将数据直接读入指定缓冲区，实现零分配读取。</para>
+    /// </summary>
     public int ReadInto(byte[] buffer, int offset, int length)
     {
         if (length <= 0) return 0;
@@ -115,6 +140,10 @@ public class TcpTransport : IFastbootBufferedTransport
         }
     }
 
+    /// <summary>
+    /// Writes data to the TCP transport with the specified length.
+    /// <para>向 TCP 传输层写入指定长度的数据。</para>
+    /// </summary>
     public long Write(byte[] data, int length)
     {
         if (_stream == null) throw new InvalidOperationException("Stream not initialized");
@@ -129,11 +158,14 @@ public class TcpTransport : IFastbootBufferedTransport
         }
     }
 
+    /// <summary>
+    /// Disposes the TCP client and stream resources.
+    /// <para>释放 TCP 客户端和流资源。</para>
+    /// </summary>
     public void Dispose()
     {
         _stream?.Dispose();
         _client?.Dispose();
     }
-
 
 }

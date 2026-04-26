@@ -4,8 +4,10 @@ using System.Net.Sockets;
 
 namespace FirmwareKit.Comm.Fastboot.Network;
 /// <summary>
-/// Fastboot over UDP Transport
-/// Fully implements the AOSP Fastboot over Network protocol (headers, sequence numbers, handshake)
+/// Fastboot over UDP Transport.
+/// Fully implements the AOSP Fastboot over Network protocol (headers, sequence numbers, handshake).
+/// <para>基于 UDP 的 Fastboot 传输。
+/// 完整实现 AOSP Fastboot 网络协议（头部、序列号、握手）。</para>
 /// </summary>
 public class UdpTransport : IFastbootBufferedTransport
 {
@@ -31,10 +33,23 @@ public class UdpTransport : IFastbootBufferedTransport
         Continuation = 0x01
     }
 
+    /// <summary>
+    /// Gets the host address of the UDP connection.
+    /// <para>获取 UDP 连接的主机地址。</para>
+    /// </summary>
     public string Host { get; }
+
+    /// <summary>
+    /// Gets the port number of the UDP connection.
+    /// <para>获取 UDP 连接的端口号。</para>
+    /// </summary>
     public int Port { get; }
     private readonly int _maxTransmissionAttempts;
 
+    /// <summary>
+    /// Initializes a new UdpTransport and performs the fastboot UDP handshake.
+    /// <para>初始化新的 UdpTransport 并执行 fastboot UDP 握手。</para>
+    /// </summary>
     public UdpTransport(string host, int port = 5554, int timeoutMs = 1000, int maxTransmissionAttempts = 10)
     {
         if (timeoutMs <= 0) throw new ArgumentOutOfRangeException(nameof(timeoutMs));
@@ -128,6 +143,10 @@ public class UdpTransport : IFastbootBufferedTransport
         return fullResponse.ToArray();
     }
 
+    /// <summary>
+    /// Reads data from the UDP transport with the specified maximum length.
+    /// <para>从 UDP 传输层读取指定最大长度的数据。</para>
+    /// </summary>
     public byte[] Read(int length)
     {
         if (length <= 0) return Array.Empty<byte>();
@@ -140,6 +159,10 @@ public class UdpTransport : IFastbootBufferedTransport
         return buffer;
     }
 
+    /// <summary>
+    /// Reads data directly into the specified buffer for zero-allocation reads.
+    /// <para>将数据直接读入指定缓冲区，实现零分配读取。</para>
+    /// </summary>
     public int ReadInto(byte[] buffer, int offset, int length)
     {
         if (length <= 0) return 0;
@@ -174,12 +197,15 @@ public class UdpTransport : IFastbootBufferedTransport
         return written;
     }
 
+    /// <summary>
+    /// Writes data to the UDP transport with the specified length.
+    /// <para>向 UDP 传输层写入指定长度的数据。</para>
+    /// </summary>
     public long Write(byte[] data, int length)
     {
         SendFastbootNoPayload(PacketId.Fastboot, data, length, _maxTransmissionAttempts);
         return length;
     }
-
     private void SendFastbootNoPayload(PacketId id, byte[] txData, int txLength, int attempts)
     {
         int offset = 0;
@@ -331,6 +357,10 @@ public class UdpTransport : IFastbootBufferedTransport
         }
     }
 
+    /// <summary>
+    /// Disposes the UDP client resources.
+    /// <para>释放 UDP 客户端资源。</para>
+    /// </summary>
     public void Dispose()
     {
         _client?.Dispose();

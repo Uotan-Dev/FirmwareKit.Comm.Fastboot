@@ -2,49 +2,60 @@ using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
+/// <summary>
+/// Fastboot driver for communicating with Android devices via the fastboot protocol.
+/// <para>用于通过 fastboot 协议与 Android 设备通信的驱动程序。</para>
+/// </summary>
 public partial class FastbootDriver : IDisposable
 {
     /// <summary>
-    /// 回调：每个烧录步骤完成时触发，参数为（步骤名，耗时，是否成功）
+    /// Callback invoked when a flash/erase step finishes, with the step name, elapsed time, and success flag.
+    /// <para>当刷写/擦除步骤完成时调用的回调，包含步骤名称、耗时和成功标志。</para>
     /// </summary>
     public Action<string, TimeSpan, bool>? OnStepFinished { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether to convert sparse images to raw before flashing.
+    /// <para>获取或设置是否在刷写前将稀疏镜像转换为原始镜像。</para>
+    /// </summary>
+    public bool ConvertSimgToRaw { get; set; }
+
+    /// <summary>
+    /// Releases the transport and all associated resources.
+    /// <para>释放传输层及所有关联资源。</para>
+    /// </summary>
     public void Dispose()
     {
-        FastbootDebug.Log($"Dispose()");
+        FastbootDebug.Log("Dispose()");
         Transport?.Dispose();
     }
 
     /// <summary>
-    /// Resets the transport (clears pipes/buffers)
+    /// Resets the USB transport connection.
+    /// <para>重置 USB 传输连接。</para>
     /// </summary>
     public void ResetTransport()
     {
-        FastbootDebug.Log($"ResetTransport()");
+        FastbootDebug.Log("ResetTransport()");
         if (Transport is UsbDevice usb)
         {
             usb.Reset();
         }
-        else if (Transport is TcpTransport tcp)
-        {
-            // TCP transport might need its own reset logic if implemented
-        }
     }
 
     /// <summary>
-    /// Determines whether the device is in fastbootd (userspace) mode.
+    /// Checks whether the device is in userspace fastboot mode (fastbootd).
+    /// <para>检查设备是否处于用户空间 fastboot 模式 (fastbootd)。</para>
     /// </summary>
     public bool IsUserspace()
     {
-        FastbootDebug.Log($"IsUserspace()");
+        FastbootDebug.Log("IsUserspace()");
         try
         {
-            // Always query device directly; cached values can be stale across reboot mode changes.
             return GetVar("is-userspace", useCache: false, quiet: true) == "yes";
         }
         catch
@@ -54,20 +65,18 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Determines whether a partition is logical. If super partition metadata is loaded, it is used with priority.
+    /// Checks whether a partition is logical, using preloaded metadata if available, otherwise querying the device.
+    /// <para>检查分区是否为逻辑分区，优先使用预加载的元数据，否则查询设备。</para>
     /// </summary>
     public bool IsLogicalOptimized(string partition)
     {
         FastbootDebug.Log($"IsLogicalOptimized(partition={partition})");
-        if (_logicalPartitionsFromMetadata != null)
-        {
-            return _logicalPartitionsFromMetadata.Contains(partition);
-        }
-        return IsLogical(partition);
+        return _logicalPartitionsFromMetadata?.Contains(partition) ?? IsLogical(partition);
     }
 
     /// <summary>
-    /// Parses super_empty.img and extracts the logical partition list.
+    /// Loads logical partition names from a super image metadata file for optimized flashing.
+    /// <para>从 super 镜像元数据文件加载逻辑分区名称，用于优化刷写。</para>
     /// </summary>
     public void LoadLogicalPartitionsFromMetadata(string superImagePath)
     {
@@ -80,13 +89,11 @@ public partial class FastbootDriver : IDisposable
         try
         {
             var meta = ReadFromImageFile(superImagePath);
-            var partitions = new HashSet<string>();
-            foreach (var part in meta.Partitions)
-            {
-                var name = part.Name.ToString();
-                if (!string.IsNullOrEmpty(name))
-                    partitions.Add(name);
-            }
+            var partitions = new HashSet<string>(
+                meta.Partitions
+                    .Select(p => p.Name.ToString())
+                    .Where(n => !string.IsNullOrEmpty(n))!,
+                StringComparer.Ordinal);
             _logicalPartitionsFromMetadata = partitions;
         }
         catch
@@ -95,6 +102,10 @@ public partial class FastbootDriver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads logical partition metadata from a super image file on disk.
+    /// <para>从磁盘上的 super 镜像文件读取逻辑分区元数据。</para>
+    /// </summary>
     public static LpMetadata ReadFromImageFile(string path)
     {
         FastbootDebug.Log($"ReadFromImageFile(path={path})");
@@ -102,12 +113,18 @@ public partial class FastbootDriver : IDisposable
         return ReadFromImageStream(stream);
     }
 
+    /// <summary>
+    /// Reads logical partition metadata from a stream.
+    /// <para>从流中读取逻辑分区元数据。</para>
+    /// </summary>
     public static LpMetadata ReadFromImageStream(Stream stream)
     {
         FastbootDebug.Log($"ReadFromImageStream(stream={stream})");
-        long[] tryOffsets = [ MetadataFormat.LP_PARTITION_RESERVED_BYTES,
-                      MetadataFormat.LP_PARTITION_RESERVED_BYTES + MetadataFormat.LP_METADATA_GEOMETRY_SIZE,
-                      0 ];
+        long[] tryOffsets = [
+            MetadataFormat.LP_PARTITION_RESERVED_BYTES,
+            MetadataFormat.LP_PARTITION_RESERVED_BYTES + MetadataFormat.LP_METADATA_GEOMETRY_SIZE,
+            0
+        ];
 
         foreach (var offset in tryOffsets)
         {
@@ -133,55 +150,103 @@ public partial class FastbootDriver : IDisposable
             catch (Exception ex)
             {
                 LpLogger.Warning($"Failed to parse at offset {offset}: {ex.Message}");
-                continue;
             }
         }
         throw new InvalidDataException("Valid LpMetadataGeometry not found. The image may not be a super image or may be corrupted.");
     }
+
+    /// <summary>
+    /// Gets the underlying transport used for fastboot communication.
+    /// <para>获取用于 fastboot 通信的底层传输层。</para>
+    /// </summary>
     public IFastbootTransport Transport { get; private set; }
     private Dictionary<string, string> _varCache = [];
     private Dictionary<string, bool> _hasSlotCache = [];
-    private HashSet<string>? _logicalPartitionsFromMetadata = null;
+    private HashSet<string>? _logicalPartitionsFromMetadata;
 
-    public FastbootDriver(IFastbootTransport transport) => Transport = transport;
-    public static int ReadTimeoutSeconds = 30;
     /// <summary>
-    /// Size of data to send in a single chunk (512KB for better WinUSB/Qualcomm compatibility)
+    /// Initializes a new FastbootDriver with the specified transport.
+    /// <para>使用指定的传输层初始化 FastbootDriver 的新实例。</para>
+    /// </summary>
+    public FastbootDriver(IFastbootTransport transport) => Transport = transport;
+
+    /// <summary>
+    /// Timeout in seconds for reading responses from the device.
+    /// <para>从设备读取响应的超时时间（秒）。</para>
+    /// </summary>
+    public static int ReadTimeoutSeconds = 30;
+
+    /// <summary>
+    /// Maximum data size in bytes sent per single write operation.
+    /// <para>每次单次写入操作发送的最大数据大小（字节）。</para>
     /// </summary>
     public static int OnceSendDataSize = 512 * 1024;
-    // Host-side resparse limit. Keep this <= fastboot protocol DATA field max (uint32).
-    // A wider default avoids unnecessary sparse conversion for large images, reducing peak memory usage.
+
+    /// <summary>
+    /// Maximum download size for sparse image transfers.
+    /// <para>稀疏镜像传输的最大下载大小。</para>
+    /// </summary>
     public static long SparseMaxDownloadSize = uint.MaxValue;
 
-    private static readonly string[] PartitionPriority = {
-    "preloader", "bootloader", "radio", "dram", "md1img", "xbl", "abl", "keystore",
-    "boot", "dtbo", "init_boot", "vendor_boot", "pvmfw",
-    "vbmeta", "vbmeta_system", "vbmeta_vendor", "vbmeta_custom",
-    "recovery", "system", "vendor", "product", "system_ext", "odm", "vendor_dlkm", "odm_dlkm", "system_dlkm"
-};
+    private static readonly string[] PartitionPriority =
+    [
+        "preloader", "bootloader", "radio", "dram", "md1img", "xbl", "abl", "keystore",
+        "boot", "dtbo", "init_boot", "vendor_boot", "pvmfw",
+        "vbmeta", "vbmeta_system", "vbmeta_vendor", "vbmeta_custom",
+        "recovery", "system", "vendor", "product", "system_ext", "odm", "vendor_dlkm", "odm_dlkm", "system_dlkm"
+    ];
 
+    /// <summary>
+    /// Raised when data is received from the device.
+    /// <para>当从设备接收到数据时引发。</para>
+    /// </summary>
     public event EventHandler<FastbootReceivedFromDeviceEventArgs>? ReceivedFromDevice;
+
+    /// <summary>
+    /// Raised when data transfer progress changes.
+    /// <para>当数据传输进度变化时引发。</para>
+    /// </summary>
     public event EventHandler<(long, long)>? DataTransferProgressChanged;
+
+    /// <summary>
+    /// Raised when the current flashing step changes.
+    /// <para>当当前刷写步骤变化时引发。</para>
+    /// </summary>
     public event EventHandler<string>? CurrentStepChanged;
+
+    /// <summary>
+    /// Raised when a fastboot command completes.
+    /// <para>当 fastboot 命令完成时引发。</para>
+    /// </summary>
     public event EventHandler<FastbootCommandEventArgs>? CommandCompleted;
 
     internal void NotifyCommandCompleted(string command, FastbootResponse response, bool quiet)
-    {
-        CommandCompleted?.Invoke(this, new FastbootCommandEventArgs(command, response, quiet));
-    }
+        => CommandCompleted?.Invoke(this, new FastbootCommandEventArgs(command, response, quiet));
 
+    /// <summary>
+    /// Notifies listeners that the current flashing step has changed.
+    /// <para>通知监听器当前刷写步骤已变更。</para>
+    /// </summary>
     public void NotifyCurrentStep(string step)
     {
         FastbootDebug.Log($"NotifyCurrentStep(step={step})");
-
         CurrentStepChanged?.Invoke(this, step);
     }
 
+    /// <summary>
+    /// Notifies listeners of data transfer progress.
+    /// <para>通知监听器数据传输进度。</para>
+    /// </summary>
     public void NotifyProgress(long current, long total)
     {
         FastbootDebug.Log($"NotifyProgress(current={current}, total={total})");
         DataTransferProgressChanged?.Invoke(this, (current, total));
     }
+
+    /// <summary>
+    /// Notifies listeners that data has been received from the device.
+    /// <para>通知监听器已从设备接收到数据。</para>
+    /// </summary>
     public void NotifyReceived(FastbootState state, string? info = null, string? text = null)
     {
         FastbootDebug.Log($"NotifyReceived(state={state}, info={info}, text={text})");
@@ -189,8 +254,8 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Checks if a partition has slots based on the "has-slot" variable from bootloader.
-    /// Results are cached to minimize round-trips.
+    /// Checks whether the specified partition has A/B slots.
+    /// <para>检查指定分区是否具有 A/B 槽位。</para>
     /// </summary>
     public bool HasSlot(string partition)
     {
@@ -200,8 +265,7 @@ public partial class FastbootDriver : IDisposable
 
         try
         {
-            string val = GetVar("has-slot:" + partition);
-            has = (val == "yes");
+            has = GetVar("has-slot:" + partition) == "yes";
             _hasSlotCache[partition] = has;
             return has;
         }
@@ -213,16 +277,16 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Gets the current active slot (usually 'a' or 'b').
+    /// Gets the current active slot suffix (e.g., "a" or "b").
+    /// <para>获取当前活跃槽位后缀（如 "a" 或 "b"）。</para>
     /// </summary>
     public string GetCurrentSlot()
     {
-        FastbootDebug.Log($"GetCurrentSlot()");
+        FastbootDebug.Log("GetCurrentSlot()");
         try
         {
             string slot = GetVar("current-slot");
-            if (slot.StartsWith("_")) slot = slot.Substring(1);
-            return slot;
+            return slot.StartsWith("_") ? slot.Substring(1) : slot;
         }
         catch
         {
@@ -230,9 +294,10 @@ public partial class FastbootDriver : IDisposable
         }
     }
 
-
-    /// <param name="serial">Optional: specify the serial number</param>
-    /// <param name="timeoutSeconds">The timeout duration (seconds), -1 means wait forever</param>
+    /// <summary>
+    /// Waits for a fastboot device to appear, with optional serial number filter and timeout.
+    /// <para>等待 fastboot 设备出现，可选序列号过滤和超时。</para>
+    /// </summary>
     public static FastbootDriver? WaitForDevice(Func<List<UsbDevice>> deviceFinder, string? serial = null, int timeoutSeconds = -1)
     {
         FastbootDebug.Log($"WaitForDevice(deviceFinder={deviceFinder}, serial={serial}, timeoutSeconds={timeoutSeconds})");
@@ -240,19 +305,13 @@ public partial class FastbootDriver : IDisposable
         while (timeoutSeconds == -1 || (DateTime.Now - start).TotalSeconds < timeoutSeconds)
         {
             var devices = deviceFinder();
-            UsbDevice? found = null;
-            if (string.IsNullOrEmpty(serial))
-            {
-                found = devices.FirstOrDefault();
-            }
-            else
-            {
-                found = devices.FirstOrDefault(d =>
+            UsbDevice? found = string.IsNullOrEmpty(serial)
+                ? devices.FirstOrDefault()
+                : devices.FirstOrDefault(d =>
                 {
                     try { d.GetSerialNumber(); return d.SerialNumber == serial; }
                     catch { return false; }
                 });
-            }
 
             if (found != null)
             {
@@ -264,12 +323,14 @@ public partial class FastbootDriver : IDisposable
         }
         return null;
     }
+
     /// <summary>
-    /// Gets all attributes
+    /// Queries all device variables via getvar:all and returns them as a dictionary.
+    /// <para>通过 getvar:all 查询所有设备变量并以字典形式返回。</para>
     /// </summary>
     public Dictionary<string, string> GetVarAll()
     {
-        FastbootDebug.Log($"GetVarAll()");
+        FastbootDebug.Log("GetVarAll()");
         _varCache.Clear();
         try
         {
@@ -279,7 +340,7 @@ public partial class FastbootDriver : IDisposable
             foreach (var line in res.Info)
             {
                 FastbootDebug.Log("Parsing line: " + line);
-                int colonIdx = line.LastIndexOf(":");
+                int colonIdx = line.LastIndexOf(':');
                 if (colonIdx > 0)
                 {
                     string k = line.Substring(0, colonIdx).Trim();
@@ -302,16 +363,16 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Gets a single attribute (with caching if enabled)
+    /// Queries a single device variable by key. Results can be cached for performance.
+    /// <para>按键查询单个设备变量。结果可缓存以提高性能。</para>
     /// </summary>
     public string GetVar(string key, bool useCache = true, bool quiet = false)
     {
         FastbootDebug.Log($"GetVar(key={key}, useCache={useCache}, quiet={quiet})");
         if (useCache && _varCache.TryGetValue(key, out string? cached)) return cached;
         var resObj = RawCommand("getvar:" + key, quiet);
-        if (resObj.Result == FastbootState.Fail || resObj.Result == FastbootState.Timeout)
+        if (resObj.Result is FastbootState.Fail or FastbootState.Timeout)
         {
-            // Do not cache transient failures/timeouts; caller can retry later.
             return "";
         }
         var res = resObj.Response;
@@ -320,19 +381,18 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Gets the number of slots
+    /// Gets the number of A/B slots on the device.
+    /// <para>获取设备上的 A/B 槽位数量。</para>
     /// </summary>
     public int GetSlotCount()
     {
-        FastbootDebug.Log($"GetSlotCount()");
-        int slot_count = 1;
-        string count = GetVar("slot-count");
-        int.TryParse(count, out slot_count);
-        return slot_count;
+        FastbootDebug.Log("GetSlotCount()");
+        return int.TryParse(GetVar("slot-count"), out int count) ? count : 1;
     }
 
     /// <summary>
-    /// If there is an active virtual A/B snapshot, attempts to cancel it
+    /// Cancels a pending snapshot update if one is in progress.
+    /// <para>如果正在进行快照更新，则取消挂起的快照更新。</para>
     /// </summary>
     public void CancelSnapshotIfNeeded()
     {
@@ -348,116 +408,83 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Ensures the device is in fastbootd (userspace) mode, if not then automatically restarts
+    /// Ensures the device is in userspace fastboot mode; reboots to fastbootd if necessary.
+    /// <para>确保设备处于用户空间 fastboot 模式；必要时重启到 fastbootd。</para>
     /// </summary>
     public void EnsureUserspace()
     {
-        if (!IsUserspace())
+        if (IsUserspace()) return;
+
+        NotifyCurrentStep("Operation requires fastbootd, rebooting...");
+        Reboot("fastboot").ThrowIfError();
+
+        _varCache.Clear();
+        System.Threading.Thread.Sleep(1000);
+        NotifyCurrentStep("waiting for any device >");
+
+        Transport = Transport switch
         {
-            NotifyCurrentStep("Operation requires fastbootd, rebooting...");
-            Reboot("fastboot").ThrowIfError();
+            UsbDevice usbDev => WaitForDevice(UsbManager.GetAllDevices, usbDev.SerialNumber, 30)?.Transport
+                ?? throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable."),
+            TcpTransport tcp => ReconnectNetworkTransport(tcp.Host, tcp.Port, (h, p) => new TcpTransport(h, p))
+                ?? throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable."),
+            UdpTransport udp => ReconnectNetworkTransport(udp.Host, udp.Port, (h, p) => new UdpTransport(h, p))
+                ?? throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable."),
+            _ => throw new NotSupportedException("Automatic reboot to userspace is only supported for USB, TCP and UDP transports.")
+        };
 
-            // Clear stale vars (including is-userspace=no) before reconnect and re-check.
-            _varCache.Clear();
-
-            // Match AOSP behavior: allow disconnect to happen before attempting reconnect.
+        DateTime userspaceWaitStart = DateTime.Now;
+        while ((DateTime.Now - userspaceWaitStart).TotalSeconds < 30)
+        {
+            if (IsUserspace()) goto enteredUserspace;
             System.Threading.Thread.Sleep(1000);
-            NotifyCurrentStep("waiting for any device >");
-
-            if (Transport is UsbDevice usbDev)
-            {
-                var newUtil = WaitForDevice(UsbManager.GetAllDevices, usbDev.SerialNumber, 30);
-                if (newUtil == null) throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
-
-                this.Transport = newUtil.Transport;
-            }
-            else if (Transport is TcpTransport tcp)
-            {
-                string host = tcp.Host;
-                int port = tcp.Port;
-                tcp.Dispose();
-
-                DateTime start = DateTime.Now;
-                bool connected = false;
-                while ((DateTime.Now - start).TotalSeconds < 60)
-                {
-                    try
-                    {
-                        Transport = new TcpTransport(host, port);
-                        connected = true;
-                        break;
-                    }
-                    catch { System.Threading.Thread.Sleep(1000); }
-                }
-                if (!connected) throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
-            }
-            else if (Transport is UdpTransport udp)
-            {
-                string host = udp.Host;
-                int port = udp.Port;
-                udp.Dispose();
-
-                DateTime start = DateTime.Now;
-                bool connected = false;
-                while ((DateTime.Now - start).TotalSeconds < 60)
-                {
-                    try
-                    {
-                        Transport = new UdpTransport(host, port);
-                        connected = true;
-                        break;
-                    }
-                    catch { System.Threading.Thread.Sleep(1000); }
-                }
-                if (!connected) throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
-            }
-            else
-            {
-                throw new NotSupportedException("Automatic reboot to userspace is only supported for USB, TCP and UDP transports.");
-            }
-
-            DateTime userspaceWaitStart = DateTime.Now;
-            bool enteredUserspace = false;
-            while ((DateTime.Now - userspaceWaitStart).TotalSeconds < 30)
-            {
-                if (IsUserspace())
-                {
-                    enteredUserspace = true;
-                    break;
-                }
-
-                System.Threading.Thread.Sleep(1000);
-            }
-
-            if (!enteredUserspace)
-            {
-                throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
-            }
-
-            _varCache.Clear();
         }
+        throw new Exception("Failed to boot into userspace fastboot; one or more components might be unbootable.");
+
+    enteredUserspace:
+        _varCache.Clear();
+    }
+
+    private IFastbootTransport? ReconnectNetworkTransport(string host, int port, Func<string, int, IFastbootTransport> createTransport)
+    {
+        DateTime start = DateTime.Now;
+        while ((DateTime.Now - start).TotalSeconds < 60)
+        {
+            try
+            {
+                return createTransport(host, port);
+            }
+            catch { System.Threading.Thread.Sleep(1000); }
+        }
+        return null;
     }
 
     /// <summary>
-    /// Validates Product Info (android-info.txt)
+    /// Validates product info content against the connected device's properties.
+    /// <para>根据已连接设备的属性验证产品信息内容。</para>
     /// </summary>
     public bool ValidateProductInfo(string content, out string? error)
-    {
-        var parser = new ProductInfoParser(this);
-        return parser.Validate(content, out error);
-    }
+        => new ProductInfoParser(this).Validate(content, out error);
 
     /// <summary>
-    /// Downloads and grabs staged data (staged data)
+    /// Retrieves staged data from the device and writes it to a file.
+    /// <para>从设备获取暂存数据并写入文件。</para>
     /// </summary>
     public void GetStaged(string outputPath)
     {
         using var fs = File.Create(outputPath);
-        UploadData("get_staged", fs);
+        GetStagedToStream(fs);
     }
 
     /// <summary>
-    /// Prints standard device information (bootloader version, baseband version, serial number, etc.)
+    /// Retrieves staged data from the device and writes it to a stream.
+    /// <para>从设备获取暂存数据并写入流。</para>
+    /// </summary>
+    public FastbootResponse GetStagedToStream(Stream output) => UploadData("get_staged", output);
+
+    /// <summary>
+    /// Dumps device info (bootloader version, baseband version, serial number) to the step notifier.
+    /// <para>将设备信息（引导加载程序版本、基带版本、序列号）输出到步骤通知器。</para>
     /// </summary>
     public void DumpInfo()
     {
@@ -469,7 +496,8 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Flashes ZIP firmware package (corresponding to fastboot update)
+    /// Flashes all images from a ZIP archive to the device.
+    /// <para>将 ZIP 归档中的所有镜像刷写到设备。</para>
     /// </summary>
     public void FlashZip(string zipPath, bool skipValidation = false, bool wipe = false, bool disableVerity = false, bool disableVerification = false)
     {
@@ -483,8 +511,6 @@ public partial class FastbootDriver : IDisposable
         {
             NotifyCurrentStep($"Extracting ZIP: {Path.GetFileName(zipPath)}");
             ZipFile.ExtractToDirectory(zipPath, tempDir);
-
-            // Reuse FlashAll logic, it will automatically handle fastboot-info.txt, optimization of super partition, and verification
             FlashAll(tempDir, wipe, false, skipValidation, true, disableVerity, disableVerification);
         }
         finally
@@ -493,71 +519,46 @@ public partial class FastbootDriver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the maximum download size supported by the device.
+    /// <para>获取设备支持的最大下载大小。</para>
+    /// </summary>
     public long GetMaxDownloadSize()
     {
         string? sizeStr = null;
         try { sizeStr = GetVar("max-download-size"); } catch { }
-        if (sizeStr == null || sizeStr.Length == 0) return SparseMaxDownloadSize;
-        string normalizedSize = sizeStr;
+        if (string.IsNullOrEmpty(sizeStr)) return SparseMaxDownloadSize;
 
-        long parsedSize;
+        long parsedSize = sizeStr!.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? long.TryParse(sizeStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out var hex) ? hex : -1
+            : long.TryParse(sizeStr, out var dec) ? dec : -1;
 
-        if (normalizedSize.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!long.TryParse(normalizedSize.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out parsedSize))
-            {
-                return SparseMaxDownloadSize;
-            }
-        }
-        else
-        {
-            if (!long.TryParse(normalizedSize, out parsedSize))
-            {
-                return SparseMaxDownloadSize;
-            }
-        }
-
-        if (parsedSize <= 0)
-        {
-            return SparseMaxDownloadSize;
-        }
-
-        // Keep within protocol limits and the configurable host-side resparse limit.
-        return Math.Min(Math.Min(parsedSize, SparseMaxDownloadSize), uint.MaxValue);
+        return parsedSize <= 0 ? SparseMaxDownloadSize : Math.Min(Math.Min(parsedSize, SparseMaxDownloadSize), uint.MaxValue);
     }
 
     /// <summary>
-    /// Whether CRC is supported (AOSP sparse protocol extension)
+    /// Checks whether the device supports CRC verification for data transfers.
+    /// <para>检查设备是否支持数据传输的 CRC 校验。</para>
     /// </summary>
-    public bool HasCrc()
-    {
-        try { return GetVar("has-crc") == "yes"; } catch { return false; }
-    }
+    public bool HasCrc() => TryGetVar("has-crc", out var v) && v == "yes";
 
     /// <summary>
-    /// Checks if the partition exists
+    /// Checks whether the specified partition exists on the device.
+    /// <para>检查指定分区在设备上是否存在。</para>
     /// </summary>
     public bool PartitionExists(string partition)
-    {
-        try
-        {
-            string res = GetPartitionSize(partition);
-            return !string.IsNullOrEmpty(res) && res != "0" && res != "0x0";
-        }
-        catch { return false; }
-    }
+        => TryGetVar("partition-size:" + partition, out var res) && !string.IsNullOrEmpty(res) && res != "0" && res != "0x0";
 
     /// <summary>
-    /// Smart flashing image (based on magic number, automatically determines if it's sparse and handles A/B slots)
+    /// Flashes an image file to the specified partition with optional slot override and super optimization control.
+    /// <para>将镜像文件刷写到指定分区，可选槽位覆盖和 super 优化控制。</para>
     /// </summary>
     public void FlashImage(string partition, string filePath, string? slotOverride = null)
-    {
-        FlashImage(partition, filePath, slotOverride, false, null);
-
-    }
+        => FlashImage(partition, filePath, slotOverride, false, null);
 
     /// <summary>
-    /// 支持 super 优化开关和分段输出回调的重载
+    /// Flashes an image file to the specified partition with full control over slot, super optimization, and progress callback.
+    /// <para>将镜像文件刷写到指定分区，完全控制槽位、super 优化和进度回调。</para>
     /// </summary>
     public void FlashImage(string partition, string filePath, string? slotOverride, bool disableSuperOptimization, Action<string>? progressCallback)
     {
@@ -570,12 +571,11 @@ public partial class FastbootDriver : IDisposable
             string emptyPath = dir != null ? Path.Combine(dir, "super_empty.img") : "super_empty.img";
             if (!disableSuperOptimization && File.Exists(emptyPath) && IsUserspace())
             {
-                progressCallback?.Invoke($"[super] Optimizing super partition flash (AOSP style)...");
+                progressCallback?.Invoke("[super] Optimizing super partition flash (AOSP style)...");
                 var helper = new SuperFlashHelper(this, "super", emptyPath);
                 var imgDir = dir ?? ".";
-                var imgFiles = Directory.GetFiles(imgDir, "*.img");
                 var mergedParts = new List<string>();
-                foreach (var img in imgFiles)
+                foreach (var img in Directory.GetFiles(imgDir, "*.img"))
                 {
                     var partName = Path.GetFileNameWithoutExtension(img);
                     if (IsLogicalOptimized(partName))
@@ -589,16 +589,15 @@ public partial class FastbootDriver : IDisposable
                     progressCallback?.Invoke($"[super] Merged logical partitions: {string.Join(", ", mergedParts)}");
                 }
                 helper.Flash();
-                progressCallback?.Invoke($"[super] Flash complete. (Optimized super flash)");
+                progressCallback?.Invoke("[super] Flash complete. (Optimized super flash)");
                 return;
             }
             else if (disableSuperOptimization)
             {
-                progressCallback?.Invoke($"[super] Super optimization disabled, will flash logical partitions separately if needed.");
+                progressCallback?.Invoke("[super] Super optimization disabled, will flash logical partitions separately if needed.");
             }
         }
 
-        string targetPartition = partition;
         if (slotOverride == "all")
         {
             FlashImage(partition, filePath, "a");
@@ -606,15 +605,12 @@ public partial class FastbootDriver : IDisposable
             return;
         }
 
-        if (HasSlot(partition))
-        {
-            targetPartition = partition + "_" + (slotOverride ?? GetCurrentSlot());
-        }
+        string targetPartition = HasSlot(partition)
+            ? partition + "_" + (slotOverride ?? GetCurrentSlot())
+            : partition;
 
         FastbootDebug.Log($"Target Partition: {targetPartition}");
 
-        // AOSP Optimal Placement: For logical partitions, zero out existing size
-        // ResizeLogicalPartition also handles ensuring userspace (fastbootd)
         if (IsLogicalOptimized(targetPartition))
         {
             try { ResizeLogicalPartition(targetPartition, 0); } catch { }
@@ -622,7 +618,7 @@ public partial class FastbootDriver : IDisposable
 
         try
         {
-            FileInfo fi = new FileInfo(filePath);
+            var fi = new FileInfo(filePath);
             using var fs = File.OpenRead(filePath);
             FlashUnsparseImage(targetPartition, fs, fi.Length).ThrowIfError();
         }
@@ -634,7 +630,8 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Waits for the virtual A/B merge to complete (corresponding to snapshot-update merge --wait)
+    /// Waits for a snapshot merge operation to complete within the specified timeout.
+    /// <para>在指定超时时间内等待快照合并操作完成。</para>
     /// </summary>
     public void WaitForSnapshotMerge(int timeoutSeconds = 600)
     {
@@ -648,24 +645,27 @@ public partial class FastbootDriver : IDisposable
                 System.Threading.Thread.Sleep(2000);
                 continue;
             }
-            if (res == "none" || res == "completed") return;
+            if (res is "none" or "completed") return;
             break;
         }
     }
 
     /// <summary>
-    /// Flashes image from stream (Updated to remove sparse handling)
+    /// Flashes an image stream to the specified partition using the current active slot.
+    /// <para>使用当前活跃槽位将镜像流刷写到指定分区。</para>
     /// </summary>
-    public void FlashImage(string partition, Stream stream)
-    {
-        string targetPartition = partition;
-        if (HasSlot(partition))
-        {
-            targetPartition = partition + "_" + GetCurrentSlot();
-        }
+    public void FlashImage(string partition, Stream stream) => FlashImage(partition, stream, null);
 
-        // AOSP Optimal Placement: For logical partitions, zero out existing size
-        // ResizeLogicalPartition also handles ensuring userspace (fastbootd)
+    /// <summary>
+    /// Flashes an image stream to the specified partition with optional slot override.
+    /// <para>将镜像流刷写到指定分区，可选槽位覆盖。</para>
+    /// </summary>
+    public void FlashImage(string partition, Stream stream, string? slotOverride)
+    {
+        string targetPartition = HasSlot(partition)
+            ? partition + "_" + (slotOverride ?? GetCurrentSlot())
+            : partition;
+
         if (IsLogicalOptimized(targetPartition))
         {
             try { ResizeLogicalPartition(targetPartition, 0); } catch { }
@@ -673,7 +673,6 @@ public partial class FastbootDriver : IDisposable
 
         try
         {
-            // Directly flash the image without sparse handling
             FlashUnsparseImage(targetPartition, stream, stream.Length);
         }
         catch (Exception ex)
@@ -684,60 +683,53 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Determines if the partition is logical
+    /// Checks whether the specified partition is a logical partition on the device.
+    /// <para>检查指定分区是否为设备上的逻辑分区。</para>
     /// </summary>
     public bool IsLogical(string partition)
-    {
-        try { return GetVar("is-logical:" + partition) == "yes"; } catch { return false; }
-    }
+        => TryGetVar("is-logical:" + partition, out var v) && v == "yes";
 
     /// <summary>
-    /// Gets the storage space size of the partition
+    /// Gets the size of the specified partition as a long integer (in bytes or hex).
+    /// <para>以长整型获取指定分区的大小（字节或十六进制）。</para>
     /// </summary>
     public long GetPartitionSizeLong(string partition)
     {
-        try
-        {
-            var res = GetVar("partition-size:" + partition);
-            if (string.IsNullOrEmpty(res)) return 0;
-            if (res.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                return Convert.ToInt64(res, 16);
-            else
-                return Convert.ToInt64(res);
-        }
-        catch { return 0; }
+        if (!TryGetVar("partition-size:" + partition, out var res) || string.IsNullOrEmpty(res)) return 0;
+        return res.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? Convert.ToInt64(res, 16)
+            : Convert.ToInt64(res);
     }
 
     /// <summary>
-    /// Gets the storage space size of the partition
+    /// Gets the raw size string of the specified partition from the device.
+    /// <para>从设备获取指定分区的原始大小字符串。</para>
     /// </summary>
     public string GetPartitionSize(string partition)
-    {
-        try { return GetVar("partition-size:" + partition); } catch { return ""; }
-    }
+        => TryGetVar("partition-size:" + partition, out var v) ? v : "";
 
     /// <summary>
-    /// Gets the storage system type of the partition
+    /// Gets the filesystem type of the specified partition.
+    /// <para>获取指定分区的文件系统类型。</para>
     /// </summary>
     public string GetPartitionType(string partition)
-    {
-        try { return GetVar("partition-type:" + partition); } catch { return ""; }
-    }
+        => TryGetVar("partition-type:" + partition, out var v) ? v : "";
 
     /// <summary>
-    /// Creates a local filesystem image and flashes it (simulating fastboot format command)
+    /// Formats a partition locally by creating an empty filesystem image and flashing it.
+    /// <para>通过创建空文件系统镜像并刷写来本地格式化分区。</para>
     /// </summary>
+    [ExternalToolDependency("mke2fs")]
+    [ExternalToolDependency("make_f2fs")]
     public void FormatPartitionLocal(string partition, string fsType = "ext4", long size = 0)
     {
         if (size <= 0)
         {
-            var res = GetVar("partition-size:" + partition);
-            if (!string.IsNullOrEmpty(res))
+            if (TryGetVar("partition-size:" + partition, out var res) && !string.IsNullOrEmpty(res))
             {
-                if (res.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                    size = Convert.ToInt64(res, 16);
-                else
-                    size = Convert.ToInt64(res);
+                size = res.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                    ? Convert.ToInt64(res, 16)
+                    : Convert.ToInt64(res);
             }
         }
         if (size <= 0) size = 1024 * 1024 * 32;
@@ -745,10 +737,12 @@ public partial class FastbootDriver : IDisposable
         string tmpFile = Path.GetTempFileName();
         try
         {
-            if (fsType == "ext4") FileSystemUtil.CreateEmptyExt4(tmpFile, size);
-            else if (fsType == "f2fs") FileSystemUtil.CreateEmptyF2fs(tmpFile, size);
-            else throw new NotSupportedException("fs type not supported: " + fsType);
-
+            switch (fsType)
+            {
+                case "ext4": FileSystemUtil.CreateEmptyExt4(tmpFile, size); break;
+                case "f2fs": FileSystemUtil.CreateEmptyF2fs(tmpFile, size); break;
+                default: throw new NotSupportedException("fs type not supported: " + fsType);
+            }
             FlashImage(partition, tmpFile);
         }
         finally
@@ -757,416 +751,9 @@ public partial class FastbootDriver : IDisposable
         }
     }
 
-    private byte[] CreateBootImageVersioned(byte[] kernel, byte[]? ramdisk, byte[]? second, byte[]? dtb, string? cmdline, string? name, uint version, uint base_addr, uint page_size)
-    {
-        switch (version)
-        {
-            case 0: return CreateBootImage(kernel, ramdisk, second, cmdline, name, base_addr, page_size);
-            case 1: return CreateBootImage1(kernel, ramdisk, second, cmdline, name, base_addr, page_size);
-            case 2: return CreateBootImage2(kernel, ramdisk, second, dtb, cmdline, name, base_addr, page_size);
-            case 3: return CreateBootImage3(kernel, ramdisk, cmdline, 0); // OS version 0 as default
-            case 4: return CreateBootImage4(kernel, ramdisk, cmdline, 0);
-            case 5: return CreateBootImage5(kernel, ramdisk, cmdline, 0);
-            case 6: return CreateBootImage6(kernel, ramdisk, cmdline, 0);
-            default: throw new NotSupportedException($"Boot image header version {version} is not supported for dynamic packaging.");
-        }
-    }
-
     /// <summary>
-    /// Generates BootImage data (V0 structure)
-    /// </summary>
-    public byte[] CreateBootImage(byte[] kernel, byte[]? ramdisk, byte[]? second, string? cmdline, string? name, uint base_addr, uint page_size)
-    {
-        BootImageHeaderV0 header = BootImageHeaderV0.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.KernelAddr = base_addr + 0x00008000;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.RamdiskAddr = base_addr + 0x01000000;
-        header.SecondSize = (uint)(second?.Length ?? 0);
-        header.SecondAddr = base_addr + 0x00F00000;
-        header.TagsAddr = base_addr + 0x00000100;
-        header.PageSize = page_size;
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 512));
-        }
-
-        if (!string.IsNullOrEmpty(name))
-        {
-            byte[] nameBytes = Encoding.ASCII.GetBytes(name);
-            Array.Copy(nameBytes, header.Name, Math.Min(nameBytes.Length, 16));
-        }
-
-        int headerSize = Marshal.SizeOf<BootImageHeaderV0>();
-        int headerPages = (headerSize + (int)page_size - 1) / (int)page_size;
-        int kernelPages = (kernel.Length + (int)page_size - 1) / (int)page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-        int secondPages = ((second?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages + secondPages) * (int)page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null)
-        {
-            Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-        }
-        if (second != null)
-        {
-            Array.Copy(second, 0, buffer, (headerPages + kernelPages + ramdiskPages) * page_size, second.Length);
-        }
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates BootImage V1 data (containing Header Size)
-    /// </summary>
-    public byte[] CreateBootImage1(byte[] kernel, byte[]? ramdisk, byte[]? second, string? cmdline, string? name, uint base_addr, uint page_size)
-    {
-        BootImageHeaderV1 header = BootImageHeaderV1.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.KernelAddr = base_addr + 0x00008000;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.RamdiskAddr = base_addr + 0x01000000;
-        header.SecondSize = (uint)(second?.Length ?? 0);
-        header.SecondAddr = base_addr + 0x00F00000;
-        header.TagsAddr = base_addr + 0x00000100;
-        header.PageSize = page_size;
-        header.HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV1>();
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 512));
-        }
-
-        if (!string.IsNullOrEmpty(name))
-        {
-            byte[] nameBytes = Encoding.ASCII.GetBytes(name);
-            Array.Copy(nameBytes, header.Name, Math.Min(nameBytes.Length, 16));
-        }
-
-        int headerPages = ((int)header.HeaderSize + (int)page_size - 1) / (int)page_size;
-        int kernelPages = (kernel.Length + (int)page_size - 1) / (int)page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-        int secondPages = ((second?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages + secondPages) * (int)page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null) Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-        if (second != null) Array.Copy(second, 0, buffer, (headerPages + kernelPages + ramdiskPages) * page_size, second.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates BootImage V2 data (containing DTB)
-    /// </summary>
-    public byte[] CreateBootImage2(byte[] kernel, byte[]? ramdisk, byte[]? second, byte[]? dtb, string? cmdline, string? name, uint base_addr, uint page_size)
-    {
-        BootImageHeaderV2 header = BootImageHeaderV2.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.KernelAddr = base_addr + 0x00008000;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.RamdiskAddr = base_addr + 0x01000000;
-        header.SecondSize = (uint)(second?.Length ?? 0);
-        header.SecondAddr = base_addr + 0x00F00000;
-        header.TagsAddr = base_addr + 0x00000100;
-        header.DtbSize = (uint)(dtb?.Length ?? 0);
-        header.DtbAddr = (ulong)base_addr + 0x01100000;
-        header.PageSize = page_size;
-        header.HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV2>();
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 512));
-        }
-
-        if (!string.IsNullOrEmpty(name))
-        {
-            byte[] nameBytes = Encoding.ASCII.GetBytes(name);
-            Array.Copy(nameBytes, header.Name, Math.Min(nameBytes.Length, 16));
-        }
-
-        int headerPages = ((int)header.HeaderSize + (int)page_size - 1) / (int)page_size;
-        int kernelPages = (kernel.Length + (int)page_size - 1) / (int)page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-        int secondPages = ((second?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-        int dtbPages = ((dtb?.Length ?? 0) + (int)page_size - 1) / (int)page_size;
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages + secondPages + dtbPages) * (int)page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null) Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-        if (second != null) Array.Copy(second, 0, buffer, (headerPages + kernelPages + ramdiskPages) * page_size, second.Length);
-        if (dtb != null) Array.Copy(dtb, 0, buffer, (headerPages + kernelPages + ramdiskPages + secondPages) * page_size, dtb.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates BootImage V3 data
-    /// </summary>
-    public byte[] CreateBootImage3(byte[] kernel, byte[]? ramdisk, string? cmdline, uint os_version)
-    {
-        BootImageHeaderV3 header = BootImageHeaderV3.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.OsVersion = os_version;
-        header.HeaderSize = 4096;
-        header.HeaderVersion = 3;
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 1536));
-        }
-
-        const int page_size = 4096;
-        int headerPages = (int)(header.HeaderSize + page_size - 1) / page_size;
-        int kernelPages = (kernel.Length + page_size - 1) / page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + page_size - 1) / page_size;
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages) * page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null)
-            Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates BootImage V4 data (containing signature part)
-    /// </summary>
-    public byte[] CreateBootImage4(byte[] kernel, byte[]? ramdisk, string? cmdline, uint os_version, byte[]? signature = null)
-    {
-        BootImageHeaderV4 header = BootImageHeaderV4.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.OsVersion = os_version;
-        header.HeaderSize = 4096;
-        header.HeaderVersion = 4;
-        header.SignatureSize = (uint)(signature?.Length ?? 0);
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 1536));
-        }
-
-        const int page_size = 4096;
-        int headerPages = (int)(header.HeaderSize + page_size - 1) / page_size;
-        int kernelPages = (kernel.Length + page_size - 1) / page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + page_size - 1) / page_size;
-        int sigPages = (int)((header.SignatureSize + page_size - 1) / page_size);
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages + sigPages) * page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null)
-            Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-        if (signature != null)
-            Array.Copy(signature, 0, buffer, (headerPages + kernelPages + ramdiskPages) * page_size, signature.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates BootImage V5 data (containing Vendor Bootconfig)
-    /// </summary>
-    public byte[] CreateBootImage5(byte[] kernel, byte[]? ramdisk, string? cmdline, uint os_version, byte[]? signature = null, byte[]? bootconfig = null)
-    {
-        BootImageHeaderV5 header = BootImageHeaderV5.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.OsVersion = os_version;
-        header.HeaderSize = 4096;
-        header.HeaderVersion = 5;
-        header.SignatureSize = (uint)(signature?.Length ?? 0);
-        header.VendorBootconfigSize = (uint)(bootconfig?.Length ?? 0);
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 1536));
-        }
-
-        const int page_size = 4096;
-        int headerPages = (int)(header.HeaderSize + page_size - 1) / page_size;
-        int kernelPages = (kernel.Length + page_size - 1) / page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + page_size - 1) / page_size;
-        int sigPages = (int)((header.SignatureSize + page_size - 1) / page_size);
-        int configPages = (int)((header.VendorBootconfigSize + page_size - 1) / page_size);
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages + sigPages + configPages) * page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null)
-            Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-        if (signature != null)
-            Array.Copy(signature, 0, buffer, (headerPages + kernelPages + ramdiskPages) * page_size, signature.Length);
-        if (bootconfig != null)
-            Array.Copy(bootconfig, 0, buffer, (headerPages + kernelPages + ramdiskPages + sigPages) * page_size, bootconfig.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates BootImage V6 data (containing Extended Reserved Area)
-    /// </summary>
-    public byte[] CreateBootImage6(byte[] kernel, byte[]? ramdisk, string? cmdline, uint os_version, byte[]? signature = null, byte[]? bootconfig = null)
-    {
-        BootImageHeaderV6 header = BootImageHeaderV6.Create();
-        header.KernelSize = (uint)kernel.Length;
-        header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
-        header.OsVersion = os_version;
-        header.HeaderSize = 4096;
-        header.HeaderVersion = 6;
-        header.SignatureSize = (uint)(signature?.Length ?? 0);
-        header.VendorBootconfigSize = (uint)(bootconfig?.Length ?? 0);
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 1536));
-        }
-
-        const int page_size = 4096;
-        int headerPages = (int)(header.HeaderSize + page_size - 1) / page_size;
-        int kernelPages = (kernel.Length + page_size - 1) / page_size;
-        int ramdiskPages = ((ramdisk?.Length ?? 0) + page_size - 1) / page_size;
-        int sigPages = (int)((header.SignatureSize + page_size - 1) / page_size);
-        int configPages = (int)((header.VendorBootconfigSize + page_size - 1) / page_size);
-
-        int totalSize = (headerPages + kernelPages + ramdiskPages + sigPages + configPages) * page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(kernel, 0, buffer, headerPages * page_size, kernel.Length);
-        if (ramdisk != null)
-            Array.Copy(ramdisk, 0, buffer, (headerPages + kernelPages) * page_size, ramdisk.Length);
-        if (signature != null)
-            Array.Copy(signature, 0, buffer, (headerPages + kernelPages + ramdiskPages) * page_size, signature.Length);
-        if (bootconfig != null)
-            Array.Copy(bootconfig, 0, buffer, (headerPages + kernelPages + ramdiskPages + sigPages) * page_size, bootconfig.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates Vendor Boot Image V3 data (containing DTB)
-    /// </summary>
-    public byte[] CreateVendorBootImage3(byte[] ramdisk, byte[] dtb, string? cmdline, string? product_name, uint page_size = 4096, uint base_addr = 0x10000000)
-    {
-        VendorBootImageHeaderV3 header = VendorBootImageHeaderV3.Create();
-        header.PageSize = page_size;
-        header.KernelAddr = base_addr + 0x00008000;
-        header.RamdiskAddr = base_addr + 0x01000000;
-        header.TagsAddr = base_addr + 0x00000100;
-        header.VendorRamdiskSize = (uint)ramdisk.Length;
-        header.DtbSize = (uint)dtb.Length;
-        header.DtbAddr = (ulong)base_addr + 0x01100000;
-        header.HeaderSize = (uint)Marshal.SizeOf<VendorBootImageHeaderV3>();
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 2048));
-        }
-
-        if (!string.IsNullOrEmpty(product_name))
-        {
-            byte[] nameBytes = Encoding.ASCII.GetBytes(product_name);
-            Array.Copy(nameBytes, header.Name, Math.Min(nameBytes.Length, 16));
-        }
-
-        int headerPages = (int)(header.HeaderSize + page_size - 1) / (int)page_size;
-        int ramdiskPages = (ramdisk.Length + (int)page_size - 1) / (int)page_size;
-        int dtbPages = (dtb.Length + (int)page_size - 1) / (int)page_size;
-
-        int totalSize = (headerPages + ramdiskPages + dtbPages) * (int)page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(ramdisk, 0, buffer, headerPages * page_size, ramdisk.Length);
-        Array.Copy(dtb, 0, buffer, (headerPages + ramdiskPages) * page_size, dtb.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Generates Vendor Boot Image V4 data (containing Bootconfig)
-    /// </summary>
-    public byte[] CreateVendorBootImage4(byte[] ramdisk, byte[] dtb, string? cmdline, string? product_name, byte[]? bootconfig = null, uint page_size = 4096, uint base_addr = 0x10000000)
-    {
-        VendorBootImageHeaderV4 header = VendorBootImageHeaderV4.Create();
-        header.PageSize = page_size;
-        header.KernelAddr = base_addr + 0x00008000;
-        header.RamdiskAddr = base_addr + 0x01000000;
-        header.TagsAddr = base_addr + 0x00000100;
-        header.VendorRamdiskSize = (uint)ramdisk.Length;
-        header.DtbSize = (uint)dtb.Length;
-        header.DtbAddr = (ulong)base_addr + 0x01100000;
-        header.HeaderSize = (uint)Marshal.SizeOf<VendorBootImageHeaderV4>();
-        header.BootconfigSize = (uint)(bootconfig?.Length ?? 0);
-
-        if (!string.IsNullOrEmpty(cmdline))
-        {
-            byte[] cmdBytes = Encoding.ASCII.GetBytes(cmdline);
-            Array.Copy(cmdBytes, header.Cmdline, Math.Min(cmdBytes.Length, 2048));
-        }
-
-        if (!string.IsNullOrEmpty(product_name))
-        {
-            byte[] nameBytes = Encoding.ASCII.GetBytes(product_name);
-            Array.Copy(nameBytes, header.Name, Math.Min(nameBytes.Length, 16));
-        }
-
-        int headerPages = (int)(header.HeaderSize + page_size - 1) / (int)page_size;
-        int ramdiskPages = (ramdisk.Length + (int)page_size - 1) / (int)page_size;
-        int dtbPages = (dtb.Length + (int)page_size - 1) / (int)page_size;
-        int configPages = (int)((header.BootconfigSize + page_size - 1) / (int)page_size);
-
-        int totalSize = (headerPages + ramdiskPages + dtbPages + configPages) * (int)page_size;
-        byte[] buffer = new byte[totalSize];
-
-        byte[] headerBytes = DataHelper.Struct2Bytes(header);
-        Array.Copy(headerBytes, 0, buffer, 0, headerBytes.Length);
-        Array.Copy(ramdisk, 0, buffer, headerPages * page_size, ramdisk.Length);
-        Array.Copy(dtb, 0, buffer, (headerPages + ramdiskPages) * page_size, dtb.Length);
-        if (bootconfig != null)
-            Array.Copy(bootconfig, 0, buffer, (headerPages + ramdiskPages + dtbPages) * page_size, bootconfig.Length);
-
-        return buffer;
-    }
-
-    /// <summary>
-    /// Validates the requirements in android-info.txt
+    /// Verifies that the device meets the requirements specified in the product info text.
+    /// <para>验证设备是否满足产品信息文本中指定的要求。</para>
     /// </summary>
     public bool VerifyRequirements(string infoText, bool force = false)
     {
@@ -1184,7 +771,8 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Executes fastboot-info.txt commands
+    /// Flashes images according to a fastboot-info.txt content string.
+    /// <para>根据 fastboot-info.txt 内容字符串刷写镜像。</para>
     /// </summary>
     public void FlashFromInfo(string infoContent, string imageDir, bool wipe = false, string? slotOverride = null, bool optimizeSuper = true, bool disableVerity = false, bool disableVerification = false)
     {
@@ -1200,7 +788,7 @@ public partial class FastbootDriver : IDisposable
             var trimmed = line.Trim();
             if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
 
-            var parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            var parts = trimmed.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).ToList();
             if (parts.Count == 0) continue;
 
             if (parts[0] == "if-wipe")
@@ -1210,6 +798,7 @@ public partial class FastbootDriver : IDisposable
             }
             if (parts.Count > 0) commands.Add(parts);
         }
+
         if (IsUserspace())
         {
             foreach (var cmdParts in commands)
@@ -1320,12 +909,9 @@ public partial class FastbootDriver : IDisposable
             else if (imgName == null) imgName = arg;
         }
 
-        if (partition != null && imgName == null)
-        {
-            imgName = partition + ".img";
-        }
+        imgName ??= partition + ".img";
 
-        if (partition != null && imgName != null)
+        if (partition != null)
         {
             string imgPath = Path.Combine(imageDir, imgName);
             if (File.Exists(imgPath))
@@ -1347,28 +933,32 @@ public partial class FastbootDriver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Checks whether the specified partition name starts with "vbmeta".
+    /// <para>检查指定分区名称是否以 "vbmeta" 开头。</para>
+    /// </summary>
     public bool IsVbmetaPartition(string partition)
-    {
-        return partition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public bool CheckFastbootInfoRequirements(string version)
-    {
-        if (uint.TryParse(version, out uint v)) return v <= 2; // Support up to version 2
-        return false;
-    }
+        => partition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Executes FlashAll (in a specified directory, finding and flashing base partitions)
+    /// Checks whether the fastboot-info.txt version is supported (version ≤ 2).
+    /// <para>检查 fastboot-info.txt 版本是否受支持（版本 ≤ 2）。</para>
     /// </summary>
-    public void FlashAll(string productOutDir, bool wipe = false, bool skipSecondary = false, bool force = false, bool optimizeSuper = true, bool disableVerity = false, bool disableVerification = false)
+    public bool CheckFastbootInfoRequirements(string version)
+        => uint.TryParse(version, out uint v) && v <= 2;
+
+    /// <summary>
+    /// Flashes all images from a product output directory to the device, handling physical, logical, and A/B partitions.
+    /// <para>将产品输出目录中的所有镜像刷写到设备，处理物理分区、逻辑分区和 A/B 分区。</para>
+    /// </summary>
+    public void FlashAll(string productOutDir, bool wipe = false, bool skipSecondary = false, bool force = false, bool optimizeSuper = true, bool disableVerity = false, bool disableVerification = false, bool disableFastbootInfo = false, bool excludeDynamicPartitions = false)
     {
         CancelSnapshotIfNeeded();
 
         LoadLogicalPartitionsFromMetadata(Path.Combine(productOutDir, "super_empty.img"));
 
         string infoPath = Path.Combine(productOutDir, "fastboot-info.txt");
-        if (File.Exists(infoPath))
+        if (!disableFastbootInfo && File.Exists(infoPath))
         {
             NotifyCurrentStep("Using fastboot-info.txt for flashing...");
             FlashFromInfo(File.ReadAllText(infoPath), productOutDir, wipe, null, optimizeSuper, disableVerity, disableVerification);
@@ -1382,14 +972,17 @@ public partial class FastbootDriver : IDisposable
             VerifyRequirements(File.ReadAllText(productInfoPath), force);
         }
 
-        var imageFiles = Directory.GetFiles(productOutDir, "*.img").ToList();
-        List<string> physicalImages = new List<string>();
-        List<string> logicalImages = new List<string>();
+        var imageFiles = Directory.GetFiles(productOutDir, "*.img");
+        var physicalImages = new List<string>();
+        var logicalImages = new List<string>();
 
         foreach (var f in imageFiles)
         {
             string part = Path.GetFileNameWithoutExtension(f);
-            if (IsLogicalOptimized(part)) logicalImages.Add(f);
+            if (IsLogicalOptimized(part))
+            {
+                if (!excludeDynamicPartitions) logicalImages.Add(f);
+            }
             else physicalImages.Add(f);
         }
 
@@ -1453,12 +1046,7 @@ public partial class FastbootDriver : IDisposable
                     if (IsLogicalOptimized(part))
                     {
                         NotifyCurrentStep($"Preparing logical partition {part}...");
-                        try
-                        {
-                            CreateLogicalPartition(part, 0);
-                        }
-                        catch { /* Ignore if already exists or not supported */ }
-
+                        try { CreateLogicalPartition(part, 0); } catch { }
                         try { ResizeLogicalPartition(part, 0); } catch { }
                     }
                 }
@@ -1470,45 +1058,40 @@ public partial class FastbootDriver : IDisposable
             }
         }
 
-        if (wipe)
-        {
-            WipeUserData();
-        }
+        if (wipe) WipeUserData();
     }
 
     /// <summary>
-    /// Clears user data, cache, and metadata partitions (corresponding to fastboot -w)
+    /// Wipes user data by erasing and formatting userdata, cache, and metadata partitions.
+    /// <para>通过擦除并格式化 userdata、cache 和 metadata 分区来清除用户数据。</para>
     /// </summary>
     public void WipeUserData()
     {
-        string[] partitions = ["userdata", "cache", "metadata"];
-        foreach (var partition in partitions)
+        foreach (var partition in new[] { "userdata", "cache", "metadata" })
         {
             try
             {
                 string partitionType = GetPartitionType(partition);
                 if (string.IsNullOrEmpty(partitionType)) continue;
 
-                ErasePartition(partition);
+                ErasePartitionNoSlot(partition);
                 FormatPartition(partition);
             }
             catch { }
         }
     }
 
-    private static void ReadStreamFully(Stream stream, byte[] buffer, int count)
+    private bool TryGetVar(string key, out string value)
     {
-        int offset = 0;
-        while (offset < count)
+        try
         {
-            int read = stream.Read(buffer, offset, count - offset);
-            if (read == 0) throw new EndOfStreamException();
-            offset += read;
+            value = GetVar(key);
+            return true;
+        }
+        catch
+        {
+            value = "";
+            return false;
         }
     }
 }
-
-
-
-
-

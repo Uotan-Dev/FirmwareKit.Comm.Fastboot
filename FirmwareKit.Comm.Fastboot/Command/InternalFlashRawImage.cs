@@ -23,11 +23,4 @@ public partial class FastbootDriver
         NotifyCurrentStep($"Flashing {partition}...");
         return RawCommand("flash:" + partition);
     }
-
 }
-
-
-
-
-
-

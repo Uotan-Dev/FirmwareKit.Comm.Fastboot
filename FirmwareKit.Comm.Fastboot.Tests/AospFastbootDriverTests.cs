@@ -115,6 +115,20 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         }
 
         [Fact]
+        public void Test_Shutdown_Command_Aosp()
+        {
+            var transport = new MockTransport();
+            var util = new FastbootDriver(transport);
+
+            transport.EnqueueResponse("OKAY");
+
+            var response = util.Shutdown();
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Contains("shutdown", transport.WrittenCommands);
+        }
+
+        [Fact]
         public void Test_ConsecutiveInfoInSinglePacket()
         {
             var transport = new MockTransport();

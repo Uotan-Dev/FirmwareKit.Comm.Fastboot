@@ -4,10 +4,15 @@ internal static class FileSystemUtil
 {
     /// <summary>
     /// Generates a highly simplified empty EXT4 image
+    /// <para>生成高度简化的空 EXT4 镜像。</para>
     /// </summary>
+    /// <param name="path">Path to the output file. <para>输出文件的路径。</para></param>
+    /// <param name="size">Size of the image in bytes. <para>镜像大小（字节）。</para></param>
+    [ExternalToolDependency("mke2fs")]
     public static void CreateEmptyExt4(string path, long size)
     {
         if (size < 4096 * 10) throw new ArgumentException("Size too small for EXT4");
+
         using var fs = File.Create(path);
         fs.SetLength(size);
 
@@ -30,10 +35,15 @@ internal static class FileSystemUtil
 
     /// <summary>
     /// Generates a highly simplified empty F2FS image
+    /// <para>生成高度简化的空 F2FS 镜像。</para>
     /// </summary>
+    /// <param name="path">Path to the output file. <para>输出文件的路径。</para></param>
+    /// <param name="size">Size of the image in bytes. <para>镜像大小（字节）。</para></param>
+    [ExternalToolDependency("make_f2fs")]
     public static void CreateEmptyF2fs(string path, long size)
     {
         if (size < 1024 * 1024 * 2) throw new ArgumentException("Size too small for F2FS");
+
         using var fs = File.Create(path);
         fs.SetLength(size);
 

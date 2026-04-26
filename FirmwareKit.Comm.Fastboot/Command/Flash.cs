@@ -7,7 +7,12 @@ public partial class FastbootDriver
 {
     /// <summary>
     /// Flashes an image stream. If image is sparse or exceeds max-download-size, it is sent as sparse chunks.
+    /// <para>刷写镜像流。如果镜像是稀疏的或超过最大下载大小，则以稀疏块形式发送。</para>
     /// </summary>
+    /// <param name="partition">The partition to flash. <para>要刷写的分区。</para></param>
+    /// <param name="stream">The image stream to flash. <para>要刷写的镜像流。</para></param>
+    /// <param name="imageSize">The size of the image in bytes. <para>镜像大小（字节）。</para></param>
+    /// <returns>A FastbootResponse indicating the result of the operation. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse FlashUnsparseImage(string partition, Stream stream, long imageSize)
     {
         if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -43,13 +48,41 @@ public partial class FastbootDriver
         }
 
         // log sizes so that callers can understand why we convert to sparse
-        FastbootDebug.Log($"FlashUnsparseImage: imageSize={imageSize}, maxDownloadSize={maxDownloadSize}, isSparse={isSparse}");
+        FastbootDebug.Log($"FlashUnsparseImage: imageSize={imageSize}, maxDownloadSize={maxDownloadSize}, isSparse={isSparse}, ConvertSimgToRaw={ConvertSimgToRaw}");
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         bool success = false;
         try
         {
-            if (isSparse)
+            if (isSparse && ConvertSimgToRaw)
+            {
+                NotifyCurrentStep($"Converting sparse image to raw image for {partition}...");
+                stream.Seek(originalPosition, SeekOrigin.Begin);
+
+                using var tempSparseImage = new TempFile("fastboot_sparse_", ".img");
+                using var tempRawImage = new TempFile("fastboot_raw_", ".img");
+
+                using (var sparseFileStream = tempSparseImage.OpenWrite())
+                {
+                    stream.CopyTo(sparseFileStream);
+                }
+
+                using (var sparseImage = SparseFile.ImportAuto(tempSparseImage.OpenRead(), validateCrc: false, verbose: false))
+                using (var rawStream = tempRawImage.OpenWrite())
+                using (var sparseStream = new FirmwareKit.Sparse.Streams.SparseStream(sparseImage))
+                {
+                    sparseStream.CopyTo(rawStream);
+                }
+
+                NotifyCurrentStep($"Flashing raw image to {partition}...");
+                using (var rawFileStream = tempRawImage.OpenRead())
+                {
+                    var resp = FlashRawImage(partition, rawFileStream, rawFileStream.Length);
+                    success = resp.Result == FastbootState.Success;
+                    return resp;
+                }
+            }
+            else if (isSparse)
             {
                 NotifyCurrentStep($"Flashing sparse image to {partition}...");
                 using var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false);

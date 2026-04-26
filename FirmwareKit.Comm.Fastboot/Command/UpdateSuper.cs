@@ -1,4 +1,3 @@
-
 using FirmwareKit.Lp;
 
 namespace FirmwareKit.Comm.Fastboot;
@@ -6,7 +5,8 @@ namespace FirmwareKit.Comm.Fastboot;
 public partial class FastbootDriver
 {
     /// <summary>
-    /// Updates Super partition metadata (corresponding to update-super)
+    /// Updates the super partition metadata from a metadata image file.
+    /// <para>从元数据镜像文件更新 super 分区元数据。</para>
     /// </summary>
     public FastbootResponse UpdateSuper(string partition, string metadataPath, bool wipe = false)
     {
@@ -30,19 +30,7 @@ public partial class FastbootDriver
         NotifyCurrentStep($"Updating super metadata for {partition}");
         DownloadData(metadataBlob).ThrowIfError();
 
-        string command = "update-super:" + partition;
-        if (wipe)
-        {
-            command += ":wipe";
-        }
+        string command = wipe ? $"update-super:{partition}:wipe" : $"update-super:{partition}";
         return RawCommand(command);
     }
-
-
 }
-
-
-
-
-
-

@@ -80,8 +80,8 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             using (var mergedRawStream = File.Create(mergedRaw))
                 mergedSparseFile.WriteRawToStream(mergedRawStream);
 
-            var originalRawBytes = await File.ReadAllBytesAsync(originalRaw);
-            var mergedRawBytes = await File.ReadAllBytesAsync(mergedRaw);
+            var originalRawBytes = await File.ReadAllBytesAsync(originalRaw, System.Threading.CancellationToken.None);
+            var mergedRawBytes = await File.ReadAllBytesAsync(mergedRaw, System.Threading.CancellationToken.None);
             Assert.Equal(originalRawBytes, mergedRawBytes);
 
             // 清理

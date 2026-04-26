@@ -65,16 +65,29 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact]
         public void Test_Erase_Aosp()
         {
-            // Ported from fastboot_driver_test.cpp: TEST_F(DriverTest, Erase)
             var transport = new MockTransport();
             var util = new FastbootDriver(transport);
 
             transport.EnqueueResponse("OKAY");
 
-            var response = util.ErasePartition("partition");
+            var response = util.ErasePartitionNoSlot("partition");
 
             Assert.Equal(FastbootState.Success, response.Result);
             Assert.Contains("erase:partition", transport.WrittenCommands);
+        }
+
+        [Fact]
+        public void Test_Erase_WithSlot_Aosp()
+        {
+            var transport = new MockTransport();
+            var util = new FastbootDriver(transport);
+
+            transport.EnqueueResponse("OKAY");
+
+            var response = util.ErasePartitionWithSlot("partition", "a");
+
+            Assert.Equal(FastbootState.Success, response.Result);
+            Assert.Contains("erase:partition_a", transport.WrittenCommands);
         }
 
         [Fact]

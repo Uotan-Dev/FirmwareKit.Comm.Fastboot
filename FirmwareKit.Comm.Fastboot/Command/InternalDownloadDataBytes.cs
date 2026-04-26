@@ -1,5 +1,3 @@
-
-
 using System.Buffers;
 
 namespace FirmwareKit.Comm.Fastboot;
@@ -7,8 +5,11 @@ namespace FirmwareKit.Comm.Fastboot;
 public partial class FastbootDriver
 {
     /// <summary>
-    /// Downloads data
+    /// Downloads a byte array to the device. Sends the data in chunks based on OnceSendDataSize.
+    /// <para>将字节数组下载到设备。根据 OnceSendDataSize 分块发送数据。</para>
     /// </summary>
+    /// <param name="data">The data bytes to download to the device. <para>要下载到设备的数据字节。</para></param>
+    /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse DownloadData(byte[] data)
     {
         if (data == null || data.Length == 0)
@@ -60,11 +61,15 @@ public partial class FastbootDriver
         return HandleResponse();
     }
 
-
+    /// <summary>
+    /// Downloads a file to the device by reading it from disk and sending its contents.
+    /// <para>通过从磁盘读取文件并发送其内容来将文件下载到设备。</para>
+    /// </summary>
+    /// <param name="filePath">Path to the file to download. <para>要下载的文件的路径。</para></param>
+    /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
+    public FastbootResponse DownloadData(string filePath)
+    {
+        using var fs = File.OpenRead(filePath);
+        return DownloadData(fs, fs.Length);
+    }
 }
-
-
-
-
-
-

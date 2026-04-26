@@ -1,41 +1,25 @@
-
-
 namespace FirmwareKit.Comm.Fastboot;
 
 public partial class FastbootDriver
 {
+    /// <summary>
+    /// Reboots the device. Supports targets: empty (normal), "recovery", "bootloader", "fastboot", or custom target.
+    /// <para>重启设备。支持目标：空（正常）、"recovery"、"bootloader"、"fastboot" 或自定义目标。</para>
+    /// </summary>
     public FastbootResponse Reboot(string target = "")
     {
         FastbootDebug.Log($"Reboot(target={target})");
-        if (string.IsNullOrEmpty(target))
+
+        var (stepMsg, command) = string.IsNullOrEmpty(target) switch
         {
-            NotifyCurrentStep("Rebooting");
-            return RawCommand("reboot");
-        }
-        if (target == "recovery")
-        {
-            NotifyCurrentStep("Rebooting into recovery");
-            return RawCommand("reboot-recovery");
-        }
-        if (target == "bootloader")
-        {
-            NotifyCurrentStep("Rebooting into bootloader");
-            return RawCommand("reboot-bootloader");
-        }
-        if (target == "fastboot")
-        {
-            NotifyCurrentStep("Rebooting into fastboot");
-            return RawCommand("reboot-fastboot");
-        }
-        NotifyCurrentStep($"Rebooting into {target}");
-        return RawCommand("reboot-" + target);
+            true => ("Rebooting", "reboot"),
+            false when target == "recovery" => ("Rebooting into recovery", "reboot-recovery"),
+            false when target == "bootloader" => ("Rebooting into bootloader", "reboot-bootloader"),
+            false when target == "fastboot" => ("Rebooting into fastboot", "reboot-fastboot"),
+            false => ($"Rebooting into {target}", "reboot-" + target)
+        };
+
+        NotifyCurrentStep(stepMsg);
+        return RawCommand(command);
     }
-
-
 }
-
-
-
-
-
-

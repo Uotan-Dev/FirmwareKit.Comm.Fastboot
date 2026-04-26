@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Xunit;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {
@@ -32,7 +33,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 stream.ReadExactly(handshake, 0, 4);
                 Assert.Equal("FB01", Encoding.ASCII.GetString(handshake));
                 stream.Write(Encoding.ASCII.GetBytes("FB01"));
-            });
+            }, System.Threading.CancellationToken.None);
 
             using var transport = new TcpTransport("127.0.0.1", port);
             await serverTask;
@@ -53,7 +54,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 stream.ReadExactly(handshake, 0, 4);
                 Assert.Equal("FB01", Encoding.ASCII.GetString(handshake));
                 stream.Write(Encoding.ASCII.GetBytes("FB99"));
-            });
+            }, System.Threading.CancellationToken.None);
 
             using var transport = new TcpTransport("127.0.0.1", port);
             await serverTask;
@@ -73,7 +74,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 byte[] handshake = new byte[4];
                 stream.ReadExactly(handshake, 0, 4);
                 stream.Write(Encoding.ASCII.GetBytes("XX01"));
-            });
+            }, System.Threading.CancellationToken.None);
 
             var ex = Assert.Throws<Exception>(() => new TcpTransport("127.0.0.1", port));
             Assert.Contains("unrecognized initialization message", ex.Message);
@@ -94,7 +95,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 byte[] handshake = new byte[4];
                 stream.ReadExactly(handshake, 0, 4);
                 stream.Write(Encoding.ASCII.GetBytes("FB00"));
-            });
+            }, System.Threading.CancellationToken.None);
 
             var ex = Assert.Throws<Exception>(() => new TcpTransport("127.0.0.1", port));
             Assert.Contains("unknown TCP protocol version 00", ex.Message);
@@ -130,7 +131,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 BinaryPrimitives.WriteInt64BigEndian(outLen, 3);
                 stream.Write(outLen);
                 stream.Write(Encoding.ASCII.GetBytes("bar"));
-            });
+            }, System.Threading.CancellationToken.None);
 
             using var transport = new TcpTransport("127.0.0.1", port);
             long written = transport.Write(Encoding.ASCII.GetBytes("foo"), 3);
@@ -165,7 +166,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 stream.Write(Encoding.ASCII.GetBytes("f"));
                 stream.Write(Encoding.ASCII.GetBytes("o"));
                 stream.Write(Encoding.ASCII.GetBytes("o"));
-            });
+            }, System.Threading.CancellationToken.None);
 
             using var transport = new TcpTransport("127.0.0.1", port);
             byte[] read = transport.Read(3);

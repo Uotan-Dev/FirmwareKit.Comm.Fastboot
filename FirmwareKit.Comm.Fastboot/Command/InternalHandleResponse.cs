@@ -14,8 +14,14 @@ public partial class FastbootDriver
     private const long MAX_DOWNLOAD_SIZE = 1024L * 1024 * 1024 * 4;
 
     /// <summary>
-    /// Handles the request
+    /// Handles the response from the device, parsing the fastboot protocol response state.
+    /// Reads response data from the transport and returns a FastbootResponse with the parsed state.
+    /// Supports OKAY, FAIL, INFO, TEXT, and DATA response types.
+    /// <para>处理来自设备的响应，解析 fastboot 协议响应状态。
+    /// 从传输层读取响应数据并返回带有解析状态的 FastbootResponse。
+    /// 支持 OKAY、FAIL、INFO、TEXT 和 DATA 响应类型。</para>
     /// </summary>
+    /// <returns>A FastbootResponse containing the parsed response state and data. <para>包含解析响应状态和数据的 FastbootResponse。</returns>
     public FastbootResponse HandleResponse()
     {
         FastbootDebug.Log($"HandleResponse()");

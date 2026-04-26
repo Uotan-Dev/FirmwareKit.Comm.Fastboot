@@ -1,16 +1,14 @@
-
-
 namespace FirmwareKit.Comm.Fastboot;
 
 internal class ProductInfoParser(FastbootDriver fastboot)
 {
-    private FastbootDriver _fastboot = fastboot;
-    private Dictionary<string, string> _varCache = [];
+    private readonly FastbootDriver _fastboot = fastboot;
+    private readonly Dictionary<string, string> _varCache = [];
 
     public bool Validate(string content, out string? error)
     {
         error = null;
-        string[] lines = content.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        string[] lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (string rawLine in lines)
         {
             string line = rawLine.Trim();
@@ -19,8 +17,7 @@ internal class ProductInfoParser(FastbootDriver fastboot)
             if (line.StartsWith("require "))
             {
                 string contentPart = line.Substring(8).Trim();
-                string[] requirements = contentPart.Split([' '], StringSplitOptions.RemoveEmptyEntries);
-                foreach (var req in requirements)
+                foreach (var req in contentPart.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (!ProcessRequire(req, out error)) return false;
                 }
@@ -28,41 +25,41 @@ internal class ProductInfoParser(FastbootDriver fastboot)
             else if (line.StartsWith("reject "))
             {
                 string contentPart = line.Substring(7).Trim();
-                string[] rejections = contentPart.Split([' '], StringSplitOptions.RemoveEmptyEntries);
-                foreach (var rej in rejections)
+                foreach (var rej in contentPart.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (!ProcessReject(rej, out error)) return false;
                 }
             }
             else if (line.StartsWith("require-for-product:"))
             {
-                int colonIdx = line.IndexOf(':');
-                int spaceIdx = line.IndexOf(' ', colonIdx);
-                if (colonIdx > 0 && spaceIdx > colonIdx)
+                if (TryExtractScopedRequirement(line, out string scopeValue, out string requirement))
                 {
-                    string prod = line.Substring(colonIdx + 1, spaceIdx - colonIdx - 1).Trim();
                     string deviceProd = GetVariable("product");
-                    if (deviceProd == prod)
-                    {
-                        if (!ProcessRequire(line.Substring(spaceIdx + 1).Trim(), out error)) return false;
-                    }
+                    if (deviceProd == scopeValue && !ProcessRequire(requirement, out error)) return false;
                 }
             }
             else if (line.StartsWith("require-for-variant:"))
             {
-                int colonIdx = line.IndexOf(':');
-                int spaceIdx = line.IndexOf(' ', colonIdx);
-                if (colonIdx > 0 && spaceIdx > colonIdx)
+                if (TryExtractScopedRequirement(line, out string scopeValue, out string requirement))
                 {
-                    string variant = line.Substring(colonIdx + 1, spaceIdx - colonIdx - 1).Trim();
                     string deviceVariant = GetVariable("variant");
-                    if (deviceVariant == variant)
-                    {
-                        if (!ProcessRequire(line.Substring(spaceIdx + 1).Trim(), out error)) return false;
-                    }
+                    if (deviceVariant == scopeValue && !ProcessRequire(requirement, out error)) return false;
                 }
             }
         }
+        return true;
+    }
+
+    private static bool TryExtractScopedRequirement(string line, out string scopeValue, out string requirement)
+    {
+        scopeValue = "";
+        requirement = "";
+        int colonIdx = line.IndexOf(':');
+        int spaceIdx = line.IndexOf(' ', colonIdx);
+        if (colonIdx <= 0 || spaceIdx <= colonIdx) return false;
+
+        scopeValue = line.Substring(colonIdx + 1, spaceIdx - colonIdx - 1).Trim();
+        requirement = line.Substring(spaceIdx + 1).Trim();
         return true;
     }
 
@@ -113,15 +110,9 @@ internal class ProductInfoParser(FastbootDriver fastboot)
         foreach (string val in rejectedValues)
         {
             string trimmedVal = val.Trim();
-            bool isMatch = false;
-            if (trimmedVal.EndsWith("*"))
-            {
-                isMatch = deviceValue.StartsWith(trimmedVal.Substring(0, trimmedVal.Length - 1));
-            }
-            else
-            {
-                isMatch = trimmedVal == deviceValue;
-            }
+            bool isMatch = trimmedVal.EndsWith("*")
+                ? deviceValue.StartsWith(trimmedVal.Substring(0, trimmedVal.Length - 1))
+                : trimmedVal == deviceValue;
 
             if (isMatch)
             {
@@ -134,7 +125,7 @@ internal class ProductInfoParser(FastbootDriver fastboot)
 
     private string GetVariable(string key)
     {
-        if (_varCache.ContainsKey(key)) return _varCache[key];
+        if (_varCache.TryGetValue(key, out string? cached)) return cached;
 
         string queryKey = key == "board" ? "product" : key;
         var resp = _fastboot.RawCommand("getvar:" + queryKey);
@@ -142,6 +133,4 @@ internal class ProductInfoParser(FastbootDriver fastboot)
         _varCache[key] = val;
         return val;
     }
-
-
 }
