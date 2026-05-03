@@ -29,10 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\FirmwareKit.Comm\FirmwareKit.Comm\FirmwareKit.Comm.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Crc32.NET" Version="1.2.0" />
     <PackageReference Include="FirmwareKit.AVB" Version="1.1.0" />
     <PackageReference Include="FirmwareKit.Comm" Version="1.0.0" />

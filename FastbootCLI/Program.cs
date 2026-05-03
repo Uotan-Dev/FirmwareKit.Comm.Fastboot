@@ -1,1170 +1,1112 @@
+using CommandLine;
+using FastbootCLI.Options;
 using FirmwareKit.Comm.Fastboot;
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using System.Globalization;
 
-namespace FastbootCLI
+namespace FastbootCLI;
+
+class Program
 {
-    class Program
+    private const int DefaultNetworkPort = 5554;
+
+    private static readonly HashSet<string> CommandTokens = new(StringComparer.OrdinalIgnoreCase)
     {
-        private const int DefaultNetworkPort = 5554;
+        "devices", "getvar", "reboot", "reboot-bootloader", "reboot-fastboot", "reboot-recovery",
+        "fetch", "flash", "flashall", "update", "flash:raw", "erase", "format", "set_active",
+        "oem", "flashing", "create-logical-partition", "delete-logical-partition", "resize-logical-partition",
+        "snapshot-update", "continue", "stage", "get_staged", "upload", "gsi", "wipe-super", "boot",
+        "connect", "disconnect", "signature", "sideload", "shutdown", "stash", "update-super"
+    };
 
-        private static string? serial = null;
-        private static string? slot = null;
-        private static bool wipeUserdata = false;
-        private static bool skipReboot = false;
-        private static bool skipSecondary = false;
-        private static bool forceFlash = false;
-        private static bool disableSuperOptimization = false;
-        private static bool excludeDynamicPartitions = false;
-        private static bool disableFastbootInfo = false;
-        private static bool disableVerity = false;
-        private static bool disableVerification = false;
-        private static string? fsOptions = null;
-        private static long? sparseLimit = null;
-        private static bool convertSimgToRaw = !Environment.Is64BitOperatingSystem;
+    static void Main(string[] args)
+    {
+        FastbootDebug.IsEnabled = Environment.GetEnvironmentVariable("FASTBOOT_DEBUG") == "1";
+        FastbootDebug.Output = message => Console.Error.WriteLine($"[DEBUG] {message}");
 
-        private static string? defaultDtb = null;
-        private static string? defaultCmdline = null;
-        private static uint? defaultHeaderVersion = null;
-        private static uint? defaultBaseAddr = null;
-        private static uint? defaultPageSize = null;
-        private static uint? defaultKernelOffset = null;
-        private static uint? defaultRamdiskOffset = null;
-        private static uint? defaultSecondOffset = null;
-        private static uint? defaultTagsOffset = null;
-        private static uint? defaultDtbOffset = null;
-        private static string? defaultOsVersion = null;
-        private static string? defaultOsPatchLevel = null;
-
-        static void Main(string[] args)
+        if (args.Length == 0)
         {
-            FastbootDebug.IsEnabled = Environment.GetEnvironmentVariable("FASTBOOT_DEBUG") == "1";
-            FastbootDebug.Output = message => Console.Error.WriteLine($"[DEBUG] {message}");
-
-            if (args.Length == 0)
-            {
-                ShowHelp();
-                return;
-            }
-
-            int i = 0;
-            var pendingCommands = new List<(string Command, List<string> Args)>();
-            var commandSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "devices", "getvar", "reboot", "reboot-bootloader", "reboot-fastboot", "reboot-recovery",
-                "fetch", "flash", "flashall", "update", "flash:raw", "erase", "format", "set_active",
-                "oem", "flashing", "create-logical-partition", "delete-logical-partition", "resize-logical-partition",
-                "snapshot-update", "continue", "stage", "get_staged", "upload", "gsi", "wipe-super", "boot",
-                "connect", "disconnect", "signature"
-            };
-
-            bool IsCommandToken(string token)
-                => commandSet.Contains(token) || token.StartsWith("format:", StringComparison.OrdinalIgnoreCase);
-
-            while (i < args.Length && args[i].StartsWith("-"))
-            {
-                string arg = args[i++];
-                if (arg == "-s" && i < args.Length) serial = args[i++];
-                else if (arg == "--slot" && i < args.Length) slot = args[i++];
-                else if (arg == "-a" || arg == "--set-active" || arg.StartsWith("--set-active=", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (arg.StartsWith("--set-active=", StringComparison.OrdinalIgnoreCase))
-                    {
-                        slot = arg.Substring("--set-active=".Length);
-                    }
-                    else if (i < args.Length && !args[i].StartsWith("-"))
-                    {
-                        slot = args[i++];
-                    }
-                }
-                else if (arg == "-w") wipeUserdata = true;
-                else if (arg == "--skip-reboot") skipReboot = true;
-                else if (arg == "--skip-secondary") skipSecondary = true;
-                else if (arg == "--force") forceFlash = true;
-                else if (arg == "--disable-super-optimization") disableSuperOptimization = true;
-                else if (arg == "--exclude-dynamic-partitions") excludeDynamicPartitions = true;
-                else if (arg == "--disable-fastboot-info") disableFastbootInfo = true;
-                else if (arg == "--fs-options" && i < args.Length) fsOptions = args[i++];
-                else if (arg == "--disable-verity") disableVerity = true;
-                else if (arg == "--disable-verification") disableVerification = true;
-                else if (arg == "-S" && i < args.Length) sparseLimit = ParseSize(args[i++]);
-                else if (arg == "--dtb" && i < args.Length) defaultDtb = args[i++];
-                else if (arg == "--cmdline" && i < args.Length) defaultCmdline = args[i++];
-                else if (arg == "--header-version" && i < args.Length) defaultHeaderVersion = ParseUIntOption("--header-version", args[i++]);
-                else if (arg == "--base" && i < args.Length) defaultBaseAddr = ParseUIntOption("--base", args[i++]);
-                else if (arg == "--page-size" && i < args.Length) defaultPageSize = ParseUIntOption("--page-size", args[i++]);
-                else if (arg == "--kernel-offset" && i < args.Length) defaultKernelOffset = ParseUIntOption("--kernel-offset", args[i++]);
-                else if (arg == "--ramdisk-offset" && i < args.Length) defaultRamdiskOffset = ParseUIntOption("--ramdisk-offset", args[i++]);
-                else if (arg == "--tags-offset" && i < args.Length) defaultTagsOffset = ParseUIntOption("--tags-offset", args[i++]);
-                else if (arg == "--dtb-offset" && i < args.Length) defaultDtbOffset = ParseUIntOption("--dtb-offset", args[i++]);
-                else if (arg == "--os-version" && i < args.Length) defaultOsVersion = args[i++];
-                else if (arg == "--os-patch-level" && i < args.Length) defaultOsPatchLevel = args[i++];
-                else if (arg == "--debug" || arg == "--verbose" || arg == "-v") FastbootDebug.IsEnabled = true;
-                else if (arg == "--unbuffered") EnableUnbufferedOutput();
-                else if (arg == "--fallback") UsbManager.ForceLibUsb = false;
-                else if (arg == "--convert-simg-to-raw") convertSimgToRaw = true;
-                else if (arg == "--version" || arg == "version") { Console.Error.WriteLine("fastboot version 1.2.5"); return; }
-                else if (arg == "-h" || arg == "--help" || arg == "help") { ShowHelp(); return; }
-                else
-                {
-                    Console.Error.WriteLine("fastboot: error: Unknown option: " + arg);
-                    Environment.Exit(1);
-                    return;
-                }
-            }
-
-            while (i < args.Length)
-            {
-                string token = args[i++];
-                string command = token;
-                var commandArgs = new List<string>();
-
-                if (token.StartsWith("format:", StringComparison.OrdinalIgnoreCase))
-                {
-                    command = "format";
-                    string spec = token.Substring("format:".Length);
-                    if (!string.IsNullOrEmpty(spec)) commandArgs.Add(spec);
-                }
-                else if (!commandSet.Contains(command))
-                {
-                    Console.Error.WriteLine("fastboot: error: Unknown command: " + token);
-                    Environment.Exit(1);
-                    return;
-                }
-
-                while (i < args.Length && !IsCommandToken(args[i]))
-                {
-                    commandArgs.Add(args[i++]);
-                }
-
-                pendingCommands.Add((command, commandArgs));
-            }
-
-            if (pendingCommands.Count == 0)
-            {
-                ShowHelp();
-                return;
-            }
-
-            if (pendingCommands.Count == 1 && pendingCommands[0].Command == "devices")
-            {
-                ExecuteDeviceList(pendingCommands[0].Args);
-                return;
-            }
-
-            while (pendingCommands.Count > 0 && (pendingCommands[0].Command == "connect" || pendingCommands[0].Command == "disconnect"))
-            {
-                ExecuteStandaloneCommand(pendingCommands[0].Command, pendingCommands[0].Args);
-                pendingCommands.RemoveAt(0);
-            }
-
-            if (pendingCommands.Count == 0)
-            {
-                return;
-            }
-
-            if (pendingCommands.Any(c => c.Command is "devices" or "connect" or "disconnect"))
-            {
-                Console.Error.WriteLine("fastboot: error: devices/connect/disconnect cannot be mixed with other commands");
-                Environment.Exit(1);
-                return;
-            }
-
-            using FastbootDriver util = OpenTargetDriver();
-            util.ConvertSimgToRaw = convertSimgToRaw;
-            if (sparseLimit.HasValue)
-            {
-                FastbootDriver.SparseMaxDownloadSize = Math.Min((long)uint.MaxValue, sparseLimit.Value);
-            }
-
-            util.ReceivedFromDevice += (s, e) =>
-            {
-                if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
-                if (e.NewText != null) Console.Error.Write(e.NewText);
-            };
-
-            util.CommandCompleted += (s, e) =>
-            {
-                if (e.Quiet) return;
-
-                var command = e.Command;
-                var response = e.Response;
-                if (response.Result == FastbootState.Fail)
-                {
-                    if (command.StartsWith("snapshot-update", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Console.Error.WriteLine($"Snapshot                                           FAILED (remote: '{response.Response}')");
-                    }
-                    else if (!command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Console.Error.WriteLine($"FAILED (remote: '{response.Response}')");
-                    }
-                    return;
-                }
-
-                if (command.StartsWith("devices", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!string.IsNullOrEmpty(response.Response))
-                    {
-                        Console.WriteLine(response.Response);
-                    }
-                    return;
-                }
-
-                if (string.IsNullOrEmpty(response.Response)) return;
-
-                if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(command, "getvar:all", StringComparison.OrdinalIgnoreCase))
-                {
-                    string key = command.Substring("getvar:".Length);
-                    bool alreadyPrinted = response.Info.Any(x => x.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase));
-                    if (!alreadyPrinted)
-                    {
-                        Console.Error.WriteLine($"{key}: {response.Response}");
-                    }
-                }
-                else if (!command.StartsWith("getvar:all", StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.Error.WriteLine(response.Response);
-                }
-            };
-
-            util.CurrentStepChanged += (s, step) =>
-            {
-                if (!string.IsNullOrEmpty(step)) Console.Error.WriteLine(step);
-            };
-
-            var stepResults = new List<(string Step, TimeSpan Duration, bool Success)>();
-            util.OnStepFinished = (step, duration, success) =>
-            {
-                if (step.StartsWith("Flash") || step.StartsWith("Flashing"))
-                {
-                    stepResults.Add((step, duration, success));
-                }
-            };
-
-            foreach (var cmd in pendingCommands)
-            {
-                try
-                {
-                    util.ResetTransport();
-                    ExecuteCommand(util, cmd.Command, cmd.Args);
-                }
-                catch (Exception ex)
-                {
-                    if (FastbootDebug.IsEnabled) Console.Error.WriteLine("[DEBUG] Exception: " + ex);
-                    Console.Error.WriteLine("fastboot: error: " + ex.Message);
-                    Environment.Exit(1);
-                }
-            }
-
-            if (pendingCommands.Any(c => c.Command is "flash" or "flashall" or "update"))
-            {
-                foreach (var (step, duration, success) in stepResults)
-                {
-                    Console.Error.WriteLine($"{step,-30} {(success ? "Success" : "Failed"),-4} Time: {duration.TotalSeconds:F2} s");
-                }
-            }
+            ShowHelp();
+            return;
         }
 
-        static FastbootDriver OpenTargetDriver()
+        var normalizedArgs = NormalizeFormatSyntax(args);
+
+        if (normalizedArgs.Any(a => a is "-h" or "--help" or "help"))
         {
-            if (!string.IsNullOrWhiteSpace(serial))
-            {
-                if (TryOpenNetworkTransport(serial!, out IFastbootTransport? networkTransport, out string? networkError))
-                {
-                    return new FastbootDriver(networkTransport!);
-                }
-
-                if (LooksLikeNetworkEndpoint(serial!))
-                {
-                    throw new Exception(string.IsNullOrWhiteSpace(networkError) ? "failed to connect network fastboot target" : networkError);
-                }
-            }
-
-            var devices = UsbManager.GetAllDevices();
-            UsbDevice? target = null;
-
-            if (serial != null)
-            {
-                target = devices.FirstOrDefault(d => string.Equals(d.SerialNumber, serial, StringComparison.OrdinalIgnoreCase));
-            }
-            else if (devices.Count > 0)
-            {
-                target = devices[0];
-            }
-
-            if (target != null)
-            {
-                foreach (var dev in devices)
-                {
-                    if (!ReferenceEquals(dev, target)) dev.Dispose();
-                }
-                return new FastbootDriver(target);
-            }
-
-            foreach (var dev in devices) dev.Dispose();
-
-            if (serial == null)
-            {
-                if (TryOpenFirstSavedNetworkTarget(out IFastbootTransport? savedTransport))
-                {
-                    return new FastbootDriver(savedTransport!);
-                }
-
-                Console.Error.WriteLine("< waiting for any device >");
-                while (true)
-                {
-                    System.Threading.Thread.Sleep(500);
-
-                    var waitedDevices = UsbManager.GetAllDevices();
-                    if (waitedDevices.Count > 0)
-                    {
-                        var waitedTarget = waitedDevices[0];
-                        for (int idx = 1; idx < waitedDevices.Count; idx++) waitedDevices[idx].Dispose();
-                        return new FastbootDriver(waitedTarget);
-                    }
-
-                    foreach (var dev in waitedDevices) dev.Dispose();
-
-                    if (TryOpenFirstSavedNetworkTarget(out IFastbootTransport? waitTransport))
-                    {
-                        return new FastbootDriver(waitTransport!);
-                    }
-                }
-            }
-
-            throw new Exception("no devices/found");
+            ShowHelp();
+            return;
         }
 
-        static void ExecuteStandaloneCommand(string command, List<string> args)
+        if (normalizedArgs.Any(a => a is "--version" or "version"))
         {
-            switch (command)
-            {
-                case "connect":
-                    ExecuteConnect(args);
-                    break;
-                case "disconnect":
-                    ExecuteDisconnect(args);
-                    break;
-                default:
-                    throw new Exception("unsupported standalone command: " + command);
-            }
+            Console.Error.WriteLine("fastboot version 1.2.5");
+            return;
         }
 
-        static void ExecuteDeviceList(List<string> args)
-        {
-            bool verbose = args.Contains("-l");
-            foreach (var dev in UsbManager.GetAllDevices())
-            {
-                if (verbose) Console.WriteLine($"{dev.SerialNumber}\tfastboot {dev.GetType().Name}");
-                else Console.WriteLine($"{dev.SerialNumber}\tfastboot");
-                dev.Dispose();
-            }
+        var (globalSegment, commandSegments) = SplitIntoSegments(normalizedArgs);
 
-            foreach (var endpoint in LoadSavedNetworkTargets())
-            {
-                if (verbose) Console.WriteLine($"{endpoint}\tfastboot network");
-                else Console.WriteLine($"{endpoint}\tfastboot");
-            }
+        if (commandSegments.Count == 0)
+        {
+            ShowHelp();
+            return;
         }
 
-        static void ExecuteConnect(List<string> args)
+        if (commandSegments.Count == 1 && commandSegments[0][0] == "devices")
         {
-            if (args.Count != 1)
-            {
-                throw new Exception("usage: fastboot connect [tcp:|udp:]HOST[:PORT]");
-            }
-
-            string endpoint = NormalizeNetworkEndpoint(args[0]);
-            if (!TryOpenNetworkTransport(endpoint, out IFastbootTransport? transport, out string? error))
-            {
-                throw new Exception(string.IsNullOrWhiteSpace(error) ? "failed to connect" : error);
-            }
-
-            transport!.Dispose();
-
-            var endpoints = LoadSavedNetworkTargets();
-            if (!endpoints.Contains(endpoint, StringComparer.OrdinalIgnoreCase))
-            {
-                endpoints.Add(endpoint);
-                SaveNetworkTargets(endpoints);
-            }
-
-            Console.Error.WriteLine("connected " + endpoint);
+            var deviceArgs = globalSegment.Concat(commandSegments[0]).ToArray();
+            Parser.Default.ParseArguments<DevicesVerb>(deviceArgs)
+                .WithParsed<DevicesVerb>(opts => ExecuteDeviceList(opts))
+                .WithNotParsed(_ => { });
+            return;
         }
 
-        static void ExecuteDisconnect(List<string> args)
+        var standaloneSegments = new List<string[]>();
+        var deviceSegments = new List<string[]>();
+
+        foreach (var seg in commandSegments)
         {
-            if (args.Count > 1)
-            {
-                throw new Exception("usage: fastboot disconnect [tcp:|udp:]HOST[:PORT]");
-            }
-
-            if (args.Count == 0)
-            {
-                SaveNetworkTargets(new List<string>());
-                Console.Error.WriteLine("disconnected all network fastboot targets");
-                return;
-            }
-
-            string endpoint = NormalizeNetworkEndpoint(args[0]);
-            var endpoints = LoadSavedNetworkTargets();
-            int removed = endpoints.RemoveAll(x => string.Equals(x, endpoint, StringComparison.OrdinalIgnoreCase));
-            SaveNetworkTargets(endpoints);
-
-            if (removed > 0) Console.Error.WriteLine("disconnected " + endpoint);
-            else Console.Error.WriteLine("no such connection: " + endpoint);
+            string cmd = seg[0];
+            if (cmd is "connect" or "disconnect")
+                standaloneSegments.Add(seg);
+            else
+                deviceSegments.Add(seg);
         }
 
-        static bool TryOpenFirstSavedNetworkTarget(out IFastbootTransport? transport)
+        if (deviceSegments.Count > 0 && standaloneSegments.Count > 0)
         {
-            foreach (var endpoint in LoadSavedNetworkTargets())
-            {
-                if (TryOpenNetworkTransport(endpoint, out transport, out _))
-                {
-                    return true;
-                }
-            }
-
-            transport = null;
-            return false;
+            Console.Error.WriteLine("fastboot: error: devices/connect/disconnect cannot be mixed with other commands");
+            Environment.Exit(1);
+            return;
         }
 
-        static bool TryOpenNetworkTransport(string endpoint, out IFastbootTransport? transport, out string? error)
+        foreach (var seg in standaloneSegments)
         {
-            transport = null;
-            error = null;
-
-            if (!TryParseNetworkEndpoint(endpoint, out string scheme, out string host, out int port, out string parseError))
-            {
-                error = parseError;
-                return false;
-            }
-
-            try
-            {
-                transport = scheme == "tcp" ? new TcpTransport(host, port) : new UdpTransport(host, port);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ex.Message;
-                transport = null;
-                return false;
-            }
+            var cmdArgs = globalSegment.Concat(seg).ToArray();
+            ExecuteStandaloneCommand(cmdArgs);
         }
 
-        static bool LooksLikeNetworkEndpoint(string value)
+        if (standaloneSegments.Count > 0) return;
+
+        if (deviceSegments.Count == 0) return;
+
+        ExecuteDeviceCommands(globalSegment, deviceSegments);
+    }
+
+    private static string[] NormalizeFormatSyntax(string[] args)
+    {
+        var result = new List<string>();
+        foreach (var arg in args)
         {
-            return value.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("udp:", StringComparison.OrdinalIgnoreCase);
-        }
-
-        static string NormalizeNetworkEndpoint(string endpoint)
-        {
-            if (!TryParseNetworkEndpoint(endpoint, out string scheme, out string host, out int port, out string error))
+            if (arg.StartsWith("format:", StringComparison.OrdinalIgnoreCase) && arg.Length > "format:".Length)
             {
-                throw new Exception(error);
+                result.Add("format");
+                result.Add(arg.Substring("format:".Length));
             }
-
-            return $"{scheme}:{host}:{port}";
-        }
-
-        static bool TryParseNetworkEndpoint(string endpoint, out string scheme, out string host, out int port, out string error)
-        {
-            scheme = "";
-            host = "";
-            port = DefaultNetworkPort;
-            error = "";
-
-            if (string.IsNullOrWhiteSpace(endpoint))
+            else if (arg.StartsWith("--set-active=", StringComparison.OrdinalIgnoreCase))
             {
-                error = "network endpoint is empty";
-                return false;
-            }
-
-            int firstColon = endpoint.IndexOf(':');
-            if (firstColon <= 0)
-            {
-                error = "network endpoint must be tcp:HOST[:PORT] or udp:HOST[:PORT]";
-                return false;
-            }
-
-            scheme = endpoint.Substring(0, firstColon).ToLowerInvariant();
-            if (scheme != "tcp" && scheme != "udp")
-            {
-                error = "network scheme must be tcp or udp";
-                return false;
-            }
-
-            string rest = endpoint.Substring(firstColon + 1);
-            if (string.IsNullOrWhiteSpace(rest))
-            {
-                error = "network endpoint missing host";
-                return false;
-            }
-
-            int portSep = rest.LastIndexOf(':');
-            if (portSep > 0)
-            {
-                host = rest.Substring(0, portSep);
-                string portText = rest.Substring(portSep + 1);
-                if (!int.TryParse(portText, NumberStyles.Integer, CultureInfo.InvariantCulture, out port) || port <= 0 || port > 65535)
-                {
-                    error = "invalid network port: " + portText;
-                    return false;
-                }
+                result.Add("--set-active");
+                result.Add(arg.Substring("--set-active=".Length));
             }
             else
             {
-                host = rest;
+                result.Add(arg);
             }
+        }
+        return result.ToArray();
+    }
 
-            if (string.IsNullOrWhiteSpace(host))
+    private static (List<string> globalSegment, List<string[]> commandSegments) SplitIntoSegments(string[] args)
+    {
+        var globalSegment = new List<string>();
+        var commandSegments = new List<string[]>();
+        int i = 0;
+
+        while (i < args.Length && !CommandTokens.Contains(args[i]) && args[i].StartsWith("-"))
+        {
+            string arg = args[i++];
+            globalSegment.Add(arg);
+            if ((arg == "-s" || arg == "--slot" || arg == "--set-active" || arg == "-a" ||
+                 arg == "-S" || arg == "--fs-options" || arg == "--dtb" || arg == "--cmdline" ||
+                 arg == "--header-version" || arg == "--base" || arg == "--page-size" ||
+                 arg == "--kernel-offset" || arg == "--ramdisk-offset" || arg == "--second-offset" ||
+                 arg == "--tags-offset" || arg == "--dtb-offset" || arg == "--os-version" ||
+                 arg == "--os-patch-level")
+                && i < args.Length && !args[i].StartsWith("-") && !CommandTokens.Contains(args[i]))
             {
-                error = "network endpoint missing host";
-                return false;
+                globalSegment.Add(args[i++]);
             }
-
-            return true;
         }
 
-        static string GetNetworkStorePath()
+        while (i < args.Length)
         {
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FastbootCLI");
-            Directory.CreateDirectory(dir);
-            return Path.Combine(dir, "network_targets.txt");
+            var cmdSeg = new List<string>();
+            while (i < args.Length && !CommandTokens.Contains(args[i]))
+            {
+                cmdSeg.Add(args[i++]);
+            }
+            if (i < args.Length)
+            {
+                cmdSeg.Add(args[i++]);
+            }
+            while (i < args.Length && !CommandTokens.Contains(args[i]))
+            {
+                cmdSeg.Add(args[i++]);
+            }
+            if (cmdSeg.Count > 0 && CommandTokens.Contains(cmdSeg[0]))
+            {
+                commandSegments.Add(cmdSeg.ToArray());
+            }
         }
 
-        static List<string> LoadSavedNetworkTargets()
-        {
-            string path = GetNetworkStorePath();
-            if (!File.Exists(path)) return new List<string>();
+        return (globalSegment, commandSegments);
+    }
 
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string line in File.ReadAllLines(path))
+    private static void ExecuteStandaloneCommand(string[] args)
+    {
+        Parser.Default.ParseArguments<ConnectVerb, DisconnectVerb>(args)
+            .WithParsed<ConnectVerb>(opts => ExecuteConnect(opts))
+            .WithParsed<DisconnectVerb>(opts => ExecuteDisconnect(opts))
+            .WithNotParsed(errors =>
             {
-                string trimmed = line.Trim();
-                if (trimmed.Length == 0) continue;
-                if (TryParseNetworkEndpoint(trimmed, out string scheme, out string host, out int port, out _))
+                foreach (var err in errors)
                 {
-                    set.Add($"{scheme}:{host}:{port}");
+                    if (err.Tag == ErrorType.HelpRequestedError || err.Tag == ErrorType.HelpVerbRequestedError)
+                        continue;
+                    Console.Error.WriteLine("fastboot: error: " + err.Tag);
                 }
-            }
+                Environment.Exit(1);
+            });
+    }
 
-            return set.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
-        }
+    private static void ExecuteDeviceCommands(List<string> globalSegment, List<string[]> commandSegments)
+    {
+        bool convertSimgToRaw = !Environment.Is64BitOperatingSystem;
+        long? sparseLimit = null;
+        GlobalOptions? globals = null;
 
-        static void SaveNetworkTargets(List<string> endpoints)
-        {
-            string path = GetNetworkStorePath();
-            var normalized = endpoints
-                .Select(NormalizeNetworkEndpoint)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            File.WriteAllLines(path, normalized);
-        }
+        var firstArgs = globalSegment.Concat(commandSegments[0]).ToArray();
 
-        static void EnableUnbufferedOutput()
-        {
-            var stdout = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
-            Console.SetOut(stdout);
-            var stderr = new StreamWriter(Console.OpenStandardError()) { AutoFlush = true };
-            Console.SetError(stderr);
-        }
-
-        static long ParseSize(string sizeStr)
-        {
-            long multiplier = 1;
-            char last = char.ToLower(sizeStr[^1]);
-            if (last == 'k') { multiplier = 1024; sizeStr = sizeStr[..^1]; }
-            else if (last == 'm') { multiplier = 1024 * 1024; sizeStr = sizeStr[..^1]; }
-            else if (last == 'g') { multiplier = 1024 * 1024 * 1024; sizeStr = sizeStr[..^1]; }
-            return long.Parse(sizeStr, CultureInfo.InvariantCulture) * multiplier;
-        }
-
-        static uint ParseUIntOption(string optionName, string value)
-        {
-            if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        Parser.Default.ParseArguments(firstArgs,
+            typeof(FlashVerb), typeof(FlashAllVerb), typeof(UpdateVerb), typeof(EraseVerb),
+            typeof(FormatVerb), typeof(BootVerb), typeof(FetchVerb), typeof(GetVarVerb),
+            typeof(RebootVerb), typeof(RebootBootloaderVerb), typeof(RebootFastbootVerb),
+            typeof(RebootRecoveryVerb), typeof(FlashRawVerb), typeof(OemVerb), typeof(FlashingVerb),
+            typeof(SetActiveVerb), typeof(CreateLogicalPartitionVerb), typeof(DeleteLogicalPartitionVerb),
+            typeof(ResizeLogicalPartitionVerb), typeof(SnapshotUpdateVerb), typeof(ContinueVerb),
+            typeof(StageVerb), typeof(GetStagedVerb), typeof(UploadVerb), typeof(GsiVerb),
+            typeof(WipeSuperVerb), typeof(SignatureVerb), typeof(ShutdownVerb), typeof(SideloadVerb),
+            typeof(StashVerb), typeof(UpdateSuperVerb)
+        )
+            .WithParsed<FlashVerb>(o => { globals = o; })
+            .WithParsed<FlashAllVerb>(o => { globals = o; })
+            .WithParsed<UpdateVerb>(o => { globals = o; })
+            .WithParsed<EraseVerb>(o => { globals = o; })
+            .WithParsed<FormatVerb>(o => { globals = o; })
+            .WithParsed<BootVerb>(o => { globals = o; })
+            .WithParsed<FetchVerb>(o => { globals = o; })
+            .WithParsed<GetVarVerb>(o => { globals = o; })
+            .WithParsed<RebootVerb>(o => { globals = o; })
+            .WithParsed<RebootBootloaderVerb>(o => { globals = o; })
+            .WithParsed<RebootFastbootVerb>(o => { globals = o; })
+            .WithParsed<RebootRecoveryVerb>(o => { globals = o; })
+            .WithParsed<FlashRawVerb>(o => { globals = o; })
+            .WithParsed<OemVerb>(o => { globals = o; })
+            .WithParsed<FlashingVerb>(o => { globals = o; })
+            .WithParsed<SetActiveVerb>(o => { globals = o; })
+            .WithParsed<CreateLogicalPartitionVerb>(o => { globals = o; })
+            .WithParsed<DeleteLogicalPartitionVerb>(o => { globals = o; })
+            .WithParsed<ResizeLogicalPartitionVerb>(o => { globals = o; })
+            .WithParsed<SnapshotUpdateVerb>(o => { globals = o; })
+            .WithParsed<ContinueVerb>(o => { globals = o; })
+            .WithParsed<StageVerb>(o => { globals = o; })
+            .WithParsed<GetStagedVerb>(o => { globals = o; })
+            .WithParsed<UploadVerb>(o => { globals = o; })
+            .WithParsed<GsiVerb>(o => { globals = o; })
+            .WithParsed<WipeSuperVerb>(o => { globals = o; })
+            .WithParsed<SignatureVerb>(o => { globals = o; })
+            .WithParsed<ShutdownVerb>(o => { globals = o; })
+            .WithParsed<SideloadVerb>(o => { globals = o; })
+            .WithParsed<StashVerb>(o => { globals = o; })
+            .WithParsed<UpdateSuperVerb>(o => { globals = o; })
+            .WithNotParsed(errors =>
             {
-                if (uint.TryParse(value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint hex))
+                foreach (var err in errors)
                 {
-                    return hex;
+                    if (err.Tag is ErrorType.HelpRequestedError or ErrorType.HelpVerbRequestedError)
+                        continue;
+                    Console.Error.WriteLine("fastboot: error: " + (err is TokenError tokErr ? tokErr.Token : err.Tag.ToString()));
                 }
-            }
+                Environment.Exit(1);
+            });
+        if (globals == null) return;
 
-            if (uint.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint parsed))
+        if (globals.Debug || globals.Verbose) FastbootDebug.IsEnabled = true;
+        if (globals.Unbuffered) EnableUnbufferedOutput();
+        if (globals.Fallback) UsbManager.ForceLibUsb = false;
+        if (globals.ConvertSimgToRaw) convertSimgToRaw = true;
+
+        if (!string.IsNullOrEmpty(globals.SparseSize))
+            sparseLimit = ParseSize(globals.SparseSize);
+
+        using FastbootDriver util = OpenTargetDriver(globals.Serial);
+        util.ConvertSimgToRaw = convertSimgToRaw;
+
+        if (sparseLimit.HasValue)
+            FastbootDriver.SparseMaxDownloadSize = Math.Min((long)uint.MaxValue, sparseLimit.Value);
+
+        WireUpDriverEvents(util);
+
+        var stepResults = new List<(string Step, TimeSpan Duration, bool Success)>();
+        util.OnStepFinished = (step, duration, success) =>
+        {
+            if (step.StartsWith("Flash") || step.StartsWith("Flashing"))
+                stepResults.Add((step, duration, success));
+        };
+
+        for (int segIdx = 0; segIdx < commandSegments.Count; segIdx++)
+        {
+            try
             {
-                return parsed;
-            }
+                var seg = commandSegments[segIdx];
+                var segArgs = segIdx == 0
+                    ? firstArgs
+                    : globalSegment.Concat(seg).ToArray();
 
-            throw new Exception($"invalid value for {optionName}: {value}");
+                util.ResetTransport();
+                ExecuteSingleCommand(util, segArgs, globals);
+            }
+            catch (Exception ex)
+            {
+                if (FastbootDebug.IsEnabled) Console.Error.WriteLine("[DEBUG] Exception: " + ex);
+                Console.Error.WriteLine("fastboot: error: " + ex.Message);
+                Environment.Exit(1);
+            }
         }
 
-        static uint EncodeOsVersion(string? osVersionText, string? osPatchLevelText)
+        if (commandSegments.Any(s => s[0] is "flash" or "flashall" or "update"))
         {
-            int major = 0;
-            int minor = 0;
-            int patch = 0;
-
-            if (!string.IsNullOrWhiteSpace(osVersionText))
+            foreach (var (step, duration, success) in stepResults)
             {
-                string[] parts = osVersionText.Split('.', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length > 0) int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out major);
-                if (parts.Length > 1) int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out minor);
-                if (parts.Length > 2) int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out patch);
+                Console.Error.WriteLine($"{step,-30} {(success ? "Success" : "Failed"),-4} Time: {duration.TotalSeconds:F2} s");
             }
-
-            major = Math.Clamp(major, 0, 127);
-            minor = Math.Clamp(minor, 0, 127);
-            patch = Math.Clamp(patch, 0, 127);
-
-            int year = 2000;
-            int month = 0;
-            if (!string.IsNullOrWhiteSpace(osPatchLevelText))
-            {
-                string[] patchParts = osPatchLevelText.Split('-', StringSplitOptions.RemoveEmptyEntries);
-                if (patchParts.Length > 0 && int.TryParse(patchParts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y)) year = y;
-                if (patchParts.Length > 1 && int.TryParse(patchParts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int m)) month = m;
-            }
-
-            year = Math.Clamp(year, 2000, 2127);
-            month = Math.Clamp(month, 0, 12);
-
-            uint encodedVersion = (uint)((major << 14) | (minor << 7) | patch);
-            uint encodedPatch = (uint)(((year - 2000) << 4) | month);
-            return (encodedVersion << 11) | encodedPatch;
         }
+    }
 
-        static void ParseBootStyleArgs(
-            List<string> args,
-            bool includePartition,
-            out string? partition,
-            out string kernel,
-            out string? ramdisk,
-            out string? second,
-            out string? dtb,
-            out string? cmdline,
-            out uint headerVersion,
-            out uint baseAddr,
-            out uint pageSize,
-            out uint kernelOffset,
-            out uint ramdiskOffset,
-            out uint secondOffset,
-            out uint tagsOffset,
-            out uint dtbOffset,
-            out uint osVersion)
+    private static void WireUpDriverEvents(FastbootDriver util)
+    {
+        util.ReceivedFromDevice += (s, e) =>
         {
-            partition = null;
-            kernel = "";
-            ramdisk = null;
-            second = null;
-            dtb = defaultDtb;
-            cmdline = defaultCmdline;
-            headerVersion = defaultHeaderVersion ?? 0;
-            baseAddr = defaultBaseAddr ?? 0x10000000;
-            pageSize = defaultPageSize ?? 2048;
-            kernelOffset = defaultKernelOffset ?? 0x00008000;
-            ramdiskOffset = defaultRamdiskOffset ?? 0x01000000;
-            secondOffset = defaultSecondOffset ?? 0x00F00000;
-            tagsOffset = defaultTagsOffset ?? 0x00000100;
-            dtbOffset = defaultDtbOffset ?? 0x01100000;
-            string? localOsVersion = defaultOsVersion;
-            string? localOsPatchLevel = defaultOsPatchLevel;
-            osVersion = EncodeOsVersion(localOsVersion, localOsPatchLevel);
+            if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
+            if (e.NewText != null) Console.Error.Write(e.NewText);
+        };
 
-            var positional = new List<string>();
-            for (int idx = 0; idx < args.Count; idx++)
+        util.CommandCompleted += (s, e) =>
+        {
+            if (e.Quiet) return;
+            var command = e.Command;
+            var response = e.Response;
+
+            if (response.Result == FastbootState.Fail)
             {
-                string token = args[idx];
-
-                if (token == "--dtb" && idx + 1 < args.Count) { dtb = args[++idx]; continue; }
-                if (token == "--cmdline" && idx + 1 < args.Count) { cmdline = args[++idx]; continue; }
-                if (token == "--header-version" && idx + 1 < args.Count) { headerVersion = ParseUIntOption("--header-version", args[++idx]); continue; }
-                if (token == "--base" && idx + 1 < args.Count) { baseAddr = ParseUIntOption("--base", args[++idx]); continue; }
-                if (token == "--page-size" && idx + 1 < args.Count) { pageSize = ParseUIntOption("--page-size", args[++idx]); continue; }
-                if (token == "--kernel-offset" && idx + 1 < args.Count) { kernelOffset = ParseUIntOption("--kernel-offset", args[++idx]); continue; }
-                if (token == "--ramdisk-offset" && idx + 1 < args.Count) { ramdiskOffset = ParseUIntOption("--ramdisk-offset", args[++idx]); continue; }
-                if (token == "--tags-offset" && idx + 1 < args.Count) { tagsOffset = ParseUIntOption("--tags-offset", args[++idx]); continue; }
-                if (token == "--dtb-offset" && idx + 1 < args.Count) { dtbOffset = ParseUIntOption("--dtb-offset", args[++idx]); continue; }
-                if (token == "--os-version" && idx + 1 < args.Count)
-                {
-                    localOsVersion = args[++idx];
-                    osVersion = EncodeOsVersion(localOsVersion, localOsPatchLevel);
-                    continue;
-                }
-                if (token == "--os-patch-level" && idx + 1 < args.Count)
-                {
-                    localOsPatchLevel = args[++idx];
-                    osVersion = EncodeOsVersion(localOsVersion, localOsPatchLevel);
-                    continue;
-                }
-
-                positional.Add(token);
-            }
-
-            if (includePartition)
-            {
-                if (positional.Count < 2) throw new Exception("missing partition or kernel argument");
-                partition = positional[0];
-                kernel = positional[1];
-                if (positional.Count > 2) ramdisk = positional[2];
-                if (positional.Count > 3) second = positional[3];
-                if (positional.Count > 4) throw new Exception("too many positional arguments");
+                if (command.StartsWith("snapshot-update", StringComparison.OrdinalIgnoreCase))
+                    Console.Error.WriteLine($"Snapshot                                           FAILED (remote: '{response.Response}')");
+                else if (!command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase))
+                    Console.Error.WriteLine($"FAILED (remote: '{response.Response}')");
                 return;
             }
 
-            if (positional.Count < 1) throw new Exception("missing kernel argument");
-            kernel = positional[0];
-            if (positional.Count > 1) ramdisk = positional[1];
-            if (positional.Count > 2) second = positional[2];
-            if (positional.Count > 3) throw new Exception("too many positional arguments");
-        }
+            if (string.IsNullOrEmpty(response.Response)) return;
 
-        static void ExecuteCommand(FastbootDriver util, string command, List<string> args)
+            if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(command, "getvar:all", StringComparison.OrdinalIgnoreCase))
+            {
+                string key = command.Substring("getvar:".Length);
+                bool alreadyPrinted = response.Info.Any(x => x.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase));
+                if (!alreadyPrinted)
+                    Console.Error.WriteLine($"{key}: {response.Response}");
+            }
+            else if (!command.StartsWith("getvar:all", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine(response.Response);
+            }
+        };
+
+        util.CurrentStepChanged += (s, step) =>
         {
-            if (command == "devices")
-            {
-                ExecuteDeviceList(args);
-                return;
-            }
+            if (!string.IsNullOrEmpty(step)) Console.Error.WriteLine(step);
+        };
+    }
 
-            if (wipeUserdata && (command == "flashall" || command == "update"))
+    private static void ExecuteSingleCommand(FastbootDriver util, string[] args, GlobalOptions globals)
+    {
+        string GetPartition(string baseName)
+        {
+            string? slot = globals.Slot;
+            if (string.IsNullOrEmpty(slot) || slot == "all")
             {
-                Console.Error.WriteLine("Wiping userdata/cache as requested by -w...");
-                util.ErasePartition("userdata");
-                util.FormatPartition("userdata");
-                util.ErasePartition("cache");
-                util.FormatPartition("cache");
-            }
-
-            string GetPartition(string baseName)
-            {
-                if (string.IsNullOrEmpty(slot) || slot == "all")
-                {
-                    if (util.HasSlot(baseName))
-                    {
-                        string current = util.GetCurrentSlot();
-                        if (!string.IsNullOrEmpty(current)) return baseName + "_" + current;
-                    }
-                    return baseName;
-                }
-
-                if (slot == "other")
+                if (util.HasSlot(baseName))
                 {
                     string current = util.GetCurrentSlot();
-                    string other = (current == "a") ? "b" : "a";
-                    return baseName + "_" + other;
+                    if (!string.IsNullOrEmpty(current)) return baseName + "_" + current;
                 }
-
-                if (util.HasSlot(baseName)) return baseName + "_" + slot;
                 return baseName;
             }
 
-            if (command == "set_active")
+            if (slot == "other")
             {
-                string? targetSlot = args.Count > 0 ? args[0] : slot;
+                string current = util.GetCurrentSlot();
+                string other = current == "a" ? "b" : "a";
+                return baseName + "_" + other;
+            }
+
+            if (util.HasSlot(baseName)) return baseName + "_" + slot;
+            return baseName;
+        }
+
+        bool wipeUserdata = globals.Wipe;
+        string? slot = globals.Slot;
+
+        Parser.Default.ParseArguments(args,
+            typeof(FlashVerb), typeof(FlashAllVerb), typeof(UpdateVerb), typeof(EraseVerb),
+            typeof(FormatVerb), typeof(BootVerb), typeof(FetchVerb), typeof(GetVarVerb),
+            typeof(RebootVerb), typeof(RebootBootloaderVerb), typeof(RebootFastbootVerb),
+            typeof(RebootRecoveryVerb), typeof(FlashRawVerb), typeof(OemVerb), typeof(FlashingVerb),
+            typeof(SetActiveVerb), typeof(CreateLogicalPartitionVerb), typeof(DeleteLogicalPartitionVerb),
+            typeof(ResizeLogicalPartitionVerb), typeof(SnapshotUpdateVerb), typeof(ContinueVerb),
+            typeof(StageVerb), typeof(GetStagedVerb), typeof(UploadVerb), typeof(GsiVerb),
+            typeof(WipeSuperVerb), typeof(SignatureVerb), typeof(ShutdownVerb), typeof(SideloadVerb),
+            typeof(StashVerb), typeof(UpdateSuperVerb)
+        )
+            .WithParsed<FlashVerb>(opts => ExecuteFlash(util, opts, globals, GetPartition))
+            .WithParsed<FlashAllVerb>(opts => ExecuteFlashAll(util, opts, globals))
+            .WithParsed<UpdateVerb>(opts => ExecuteUpdate(util, opts, globals))
+            .WithParsed<EraseVerb>(opts =>
+            {
+                util.ErasePartition(GetPartition(opts.Partition)).ThrowIfError();
+            })
+            .WithParsed<FormatVerb>(opts => ExecuteFormat(util, opts, globals, GetPartition))
+            .WithParsed<BootVerb>(opts => ExecuteBoot(util, opts, globals))
+            .WithParsed<FetchVerb>(opts => ExecuteFetch(util, opts, GetPartition))
+            .WithParsed<GetVarVerb>(opts =>
+            {
+                if (opts.Variable == "all") util.GetVarAll();
+                else util.GetVar(opts.Variable);
+            })
+            .WithParsed<RebootVerb>(opts =>
+            {
+                string target = opts.Target ?? "";
+                if (target == "fastboot")
+                {
+                    Console.Error.WriteLine("waiting for any device >");
+                    util.EnsureUserspace();
+                }
+                else
+                {
+                    util.Reboot(target).ThrowIfError();
+                }
+            })
+            .WithParsed<RebootBootloaderVerb>(opts => util.Reboot("bootloader").ThrowIfError())
+            .WithParsed<RebootFastbootVerb>(opts =>
+            {
+                Console.Error.WriteLine("waiting for any device >");
+                util.EnsureUserspace();
+            })
+            .WithParsed<RebootRecoveryVerb>(opts => util.Reboot("recovery").ThrowIfError())
+            .WithParsed<FlashRawVerb>(opts => ExecuteFlashRaw(util, opts, globals, GetPartition))
+            .WithParsed<OemVerb>(opts =>
+            {
+                string oemCmd = string.Join(" ", opts.CommandArgs);
+                util.OemCommand(oemCmd).ThrowIfError();
+            })
+            .WithParsed<FlashingVerb>(opts =>
+            {
+                string flashCmd = string.Join(" ", opts.SubCommandArgs);
+                util.FlashingCommand(flashCmd).ThrowIfError();
+            })
+            .WithParsed<SetActiveVerb>(opts =>
+            {
+                string? targetSlot = opts.ActiveSlot ?? slot;
                 if (string.IsNullOrEmpty(targetSlot))
                 {
                     string? current = util.GetVar("current-slot");
-                    targetSlot = (current == "a") ? "b" : "a";
+                    targetSlot = current == "a" ? "b" : "a";
                 }
                 util.SetActiveSlot(targetSlot).ThrowIfError();
-                return;
-            }
-
-            switch (command)
+            })
+            .WithParsed<CreateLogicalPartitionVerb>(opts =>
             {
-                case "getvar":
-                    if (args.Count == 0) throw new Exception("getvar requires a variable name");
-                    if (args[0] == "all") util.GetVarAll();
-                    else util.GetVar(args[0]);
-                    break;
+                if (!long.TryParse(opts.Size, out long sz))
+                    throw new Exception("Invalid size: " + opts.Size);
+                util.CreateLogicalPartition(opts.Partition, sz).ThrowIfError();
+            })
+            .WithParsed<DeleteLogicalPartitionVerb>(opts =>
+            {
+                util.DeleteLogicalPartition(opts.Partition).ThrowIfError();
+            })
+            .WithParsed<ResizeLogicalPartitionVerb>(opts =>
+            {
+                if (!long.TryParse(opts.Size, out long rsz))
+                    throw new Exception("Invalid size: " + opts.Size);
+                util.ResizeLogicalPartition(opts.Partition, rsz).ThrowIfError();
+            })
+            .WithParsed<SnapshotUpdateVerb>(opts =>
+            {
+                string action = opts.Action ?? "cancel";
+                if (action is not ("cancel" or "merge"))
+                    throw new Exception("usage: fastboot snapshot-update cancel|merge");
+                util.SnapshotUpdate(action).ThrowIfError();
+            })
+            .WithParsed<ContinueVerb>(opts => util.Continue().ThrowIfError())
+            .WithParsed<StageVerb>(opts =>
+            {
+                util.Stage(File.ReadAllBytes(opts.Filename)).ThrowIfError();
+            })
+            .WithParsed<GetStagedVerb>(opts =>
+            {
+                util.GetStaged(opts.OutFile);
+            })
+            .WithParsed<UploadVerb>(opts =>
+            {
+                util.Upload(opts.Name, opts.OutFile).ThrowIfError();
+            })
+            .WithParsed<GsiVerb>(opts =>
+            {
+                string sub = opts.SubCommand;
+                if (sub is not ("wipe" or "disable" or "status"))
+                    throw new Exception("usage: fastboot gsi wipe|disable|status");
+                util.GsiCommand(sub).ThrowIfError();
+            })
+            .WithParsed<WipeSuperVerb>(opts =>
+            {
+                if (opts.SuperEmpty != null)
+                    util.UpdateSuper("super", opts.SuperEmpty, true).ThrowIfError();
+                else
+                    util.WipeSuper("super").ThrowIfError();
+            })
+            .WithParsed<SignatureVerb>(opts =>
+            {
+                util.Signature(File.ReadAllBytes(opts.SignatureFile)).ThrowIfError();
+            })
+            .WithParsed<ShutdownVerb>(opts => util.Shutdown().ThrowIfError())
+            .WithParsed<SideloadVerb>(opts => util.Sideload(opts.ZipPath).ThrowIfError())
+            .WithParsed<StashVerb>(opts =>
+            {
+                util.Stash(opts.Name, opts.Filename).ThrowIfError();
+            })
+            .WithParsed<UpdateSuperVerb>(opts =>
+            {
+                util.UpdateSuper(opts.Partition, opts.MetadataPath, opts.Wipe).ThrowIfError();
+            })
+            .WithNotParsed(errors =>
+            {
+                foreach (var err in errors)
+                {
+                    if (err.Tag is ErrorType.HelpRequestedError or ErrorType.HelpVerbRequestedError)
+                        continue;
+                    throw new Exception(err.Tag.ToString());
+                }
+            });
+    }
 
-                case "reboot":
-                    string targetStr = args.Count > 0 ? args[0] : "";
-                    if (targetStr == "fastboot")
-                    {
-                        Console.Error.WriteLine("waiting for any device >");
-                        util.EnsureUserspace();
-                    }
-                    else
-                    {
-                        util.Reboot(targetStr).ThrowIfError();
-                    }
-                    break;
+    private static void ExecuteFlash(FastbootDriver util, FlashVerb opts, GlobalOptions globals, Func<string, string> getPartition)
+    {
+        string? slot = globals.Slot;
+        bool flashDisableVerity = globals.DisableVerity;
+        bool flashDisableVerification = globals.DisableVerification;
 
-                case "reboot-bootloader":
-                    util.Reboot("bootloader").ThrowIfError();
-                    break;
+        string flashPartition = opts.Partition ?? "";
+        string flashFile;
+        if (!string.IsNullOrEmpty(opts.Filename))
+        {
+            flashFile = opts.Filename;
+        }
+        else
+        {
+            string? productOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
+            if (string.IsNullOrEmpty(productOut))
+                throw new Exception("filename is required when ANDROID_PRODUCT_OUT is not set");
+            flashFile = Path.Combine(productOut, flashPartition + ".img");
+        }
 
-                case "reboot-fastboot":
-                    Console.Error.WriteLine("waiting for any device >");
-                    util.EnsureUserspace();
-                    break;
+        if (!File.Exists(flashFile)) throw new FileNotFoundException(flashFile);
 
-                case "reboot-recovery":
-                    util.Reboot("recovery").ThrowIfError();
-                    break;
+        string? slotOverride = slot;
+        if (slotOverride == "other")
+        {
+            string currentSlot = util.GetCurrentSlot();
+            slotOverride = currentSlot == "a" ? "b" : "a";
+        }
 
-                case "fetch":
-                    if (args.Count < 2) throw new Exception("usage: fastboot fetch <partition> <outfile> [offset [size]]");
-                    string fetchPart = GetPartition(args[0]);
-                    if (args.Count > 2)
-                    {
-                        long offset = ParseSize(args[2]);
-                        long fetchSize = args.Count > 3 ? ParseSize(args[3]) : -1;
-                        util.Fetch(fetchPart, args[1], offset, fetchSize).ThrowIfError();
-                    }
-                    else
-                    {
-                        util.Fetch(fetchPart, args[1]).ThrowIfError();
-                    }
-                    break;
+        bool isVbmeta = flashPartition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
+        if (isVbmeta && (flashDisableVerity || flashDisableVerification))
+        {
+            string vbmetaTarget = getPartition(flashPartition);
+            util.FlashVbmeta(vbmetaTarget, flashFile, flashDisableVerity, flashDisableVerification, globals.PrivateKeyPath).ThrowIfError();
+        }
+        else if (flashPartition.StartsWith("vendor_boot:ramdisk", StringComparison.OrdinalIgnoreCase))
+        {
+            ExecuteVendorBootRamdiskFlash(util, flashFile, globals, slotOverride);
+        }
+        else
+        {
+            util.FlashImage(flashPartition, flashFile, slotOverride);
+        }
+    }
 
-                case "flash":
-                    if (args.Count == 0) throw new Exception("usage: fastboot flash [--disable-verity] [--disable-verification] <partition> [filename]");
+    private static void ExecuteVendorBootRamdiskFlash(FastbootDriver util, string ramdiskFile, GlobalOptions globals, string? slotOverride)
+    {
+        string vendorPartition = "vendor_boot";
+        if (util.HasSlot(vendorPartition))
+        {
+            string current = util.GetCurrentSlot();
+            if (!string.IsNullOrEmpty(current)) vendorPartition += "_" + current;
+        }
 
-                    bool flashDisableVerity = false;
-                    bool flashDisableVerification = false;
-                    var flashArgs = new List<string>();
-                    foreach (var a in args)
-                    {
-                        if (a == "--disable-verity") flashDisableVerity = true;
-                        else if (a == "--disable-verification") flashDisableVerification = true;
-                        else flashArgs.Add(a);
-                    }
+        string tempOriginal = Path.Combine(Path.GetTempPath(), "vendor_boot_orig_" + Guid.NewGuid().ToString("N") + ".img");
+        string tempRepacked = Path.Combine(Path.GetTempPath(), "vendor_boot_repacked_" + Guid.NewGuid().ToString("N") + ".img");
+        try
+        {
+            util.Fetch(vendorPartition, tempOriginal).ThrowIfError();
+            using (var originalStream = File.OpenRead(tempOriginal))
+            {
+                var vendorBoot = BootImage.Parse(originalStream);
+                vendorBoot.Ramdisk = File.ReadAllBytes(ramdiskFile);
+                if (!string.IsNullOrWhiteSpace(globals.Dtb) && File.Exists(globals.Dtb))
+                    vendorBoot.Dtb = File.ReadAllBytes(globals.Dtb);
 
-                    flashDisableVerity |= disableVerity;
-                    flashDisableVerification |= disableVerification;
+                using var repacked = File.Create(tempRepacked);
+                vendorBoot.Serialize(repacked);
+            }
+            util.FlashImage("vendor_boot", tempRepacked, slotOverride);
+        }
+        finally
+        {
+            try { if (File.Exists(tempOriginal)) File.Delete(tempOriginal); } catch { }
+            try { if (File.Exists(tempRepacked)) File.Delete(tempRepacked); } catch { }
+        }
+    }
 
-                    if (flashArgs.Count == 0)
-                        throw new Exception("usage: fastboot flash [--disable-verity] [--disable-verification] <partition> [filename]");
+    private static void ExecuteFlashAll(FastbootDriver util, FlashAllVerb opts, GlobalOptions globals)
+    {
+        string? productOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
+        if (string.IsNullOrEmpty(productOut))
+            throw new Exception("ANDROID_PRODUCT_OUT not set. Please use: fastboot update ZIP");
 
-                    string flashPartition = flashArgs[0];
-                    string flashFile;
-                    if (flashArgs.Count > 1)
-                    {
-                        flashFile = flashArgs[1];
-                    }
-                    else
-                    {
-                        string? productOutForFlash = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
-                        if (string.IsNullOrEmpty(productOutForFlash))
-                            throw new Exception("filename is required when ANDROID_PRODUCT_OUT is not set");
-                        flashFile = Path.Combine(productOutForFlash, flashPartition + ".img");
-                    }
+        if (globals.Wipe)
+        {
+            Console.Error.WriteLine("Wiping userdata/cache as requested by -w...");
+            util.ErasePartition("userdata");
+            util.FormatPartition("userdata");
+            util.ErasePartition("cache");
+            util.FormatPartition("cache");
+        }
 
-                    if (!File.Exists(flashFile)) throw new FileNotFoundException(flashFile);
+        util.FlashAll(productOut, false, globals.SkipSecondary, globals.Force,
+            !globals.DisableSuperOptimization, globals.DisableVerity, globals.DisableVerification,
+            globals.DisableFastbootInfo, globals.ExcludeDynamicPartitions);
 
-                    string? slotOverride = slot;
-                    if (slotOverride == "other")
-                    {
-                        string currentSlot = util.GetCurrentSlot();
-                        slotOverride = currentSlot == "a" ? "b" : "a";
-                    }
+        if (!globals.SkipReboot) util.Reboot("");
+    }
 
-                    bool isVbmeta = flashPartition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
-                    if (isVbmeta && (flashDisableVerity || flashDisableVerification))
-                    {
-                        string vbmetaTarget = GetPartition(flashPartition);
-                        util.FlashVbmeta(vbmetaTarget, flashFile, flashDisableVerity, flashDisableVerification).ThrowIfError();
-                    }
-                    else if (flashPartition.StartsWith("vendor_boot:ramdisk", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string vendorPartition = GetPartition("vendor_boot");
-                        string tempOriginal = Path.Combine(Path.GetTempPath(), "vendor_boot_orig_" + Guid.NewGuid().ToString("N") + ".img");
-                        string tempRepacked = Path.Combine(Path.GetTempPath(), "vendor_boot_repacked_" + Guid.NewGuid().ToString("N") + ".img");
-                        try
-                        {
-                            util.Fetch(vendorPartition, tempOriginal).ThrowIfError();
-                            using (var originalStream = File.OpenRead(tempOriginal))
-                            {
-                                var vendorBoot = BootImage.Parse(originalStream);
-                                vendorBoot.Ramdisk = File.ReadAllBytes(flashFile);
-                                if (!string.IsNullOrWhiteSpace(defaultDtb) && File.Exists(defaultDtb))
-                                {
-                                    vendorBoot.Dtb = File.ReadAllBytes(defaultDtb);
-                                }
+    private static void ExecuteUpdate(FastbootDriver util, UpdateVerb opts, GlobalOptions globals)
+    {
+        if (globals.Wipe)
+        {
+            Console.Error.WriteLine("Wiping userdata/cache as requested by -w...");
+            util.ErasePartition("userdata");
+            util.FormatPartition("userdata");
+            util.ErasePartition("cache");
+            util.FormatPartition("cache");
+        }
 
-                                using var repacked = File.Create(tempRepacked);
-                                vendorBoot.Serialize(repacked);
-                            }
+        util.FlashUpdateZip(opts.ZipPath, globals.SkipSecondary, globals.DisableVerity,
+            globals.DisableVerification, globals.Force, !globals.DisableSuperOptimization,
+            globals.DisableFastbootInfo, globals.ExcludeDynamicPartitions);
 
-                            util.FlashImage("vendor_boot", tempRepacked, slotOverride);
-                        }
-                        finally
-                        {
-                            try { if (File.Exists(tempOriginal)) File.Delete(tempOriginal); } catch { }
-                            try { if (File.Exists(tempRepacked)) File.Delete(tempRepacked); } catch { }
-                        }
-                    }
-                    else
-                    {
-                        util.FlashImage(flashPartition, flashFile, slotOverride);
-                    }
-                    break;
+        if (!globals.SkipReboot) util.Reboot("");
+    }
 
-                case "flashall":
-                    string? productOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
-                    if (string.IsNullOrEmpty(productOut)) throw new Exception("ANDROID_PRODUCT_OUT not set. Please use: fastboot update ZIP");
-                    util.FlashAll(productOut, false, skipSecondary, forceFlash, !disableSuperOptimization, disableVerity, disableVerification, disableFastbootInfo, excludeDynamicPartitions);
-                    if (!skipReboot) util.Reboot("");
-                    break;
+    private static void ExecuteFormat(FastbootDriver util, FormatVerb opts, GlobalOptions globals, Func<string, string> getPartition)
+    {
+        string formatPartition;
+        string? formatFsType = null;
+        long? formatSize = null;
 
-                case "update":
-                    if (args.Count == 0) throw new Exception("usage: fastboot update <zip>");
-                    util.FlashUpdateZip(args[0], skipSecondary, disableVerity, disableVerification, forceFlash, !disableSuperOptimization, disableFastbootInfo, excludeDynamicPartitions);
-                    if (!skipReboot) util.Reboot("");
-                    break;
+        if (opts.Partition2 != null)
+        {
+            string spec = opts.Partition ?? "";
+            formatPartition = opts.Partition2;
+            var parts = spec.Split(':', StringSplitOptions.None);
+            if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0])) formatFsType = parts[0];
+            if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1])) formatSize = ParseSize(parts[1]);
+        }
+        else
+        {
+            formatPartition = opts.Partition ?? "";
+        }
 
-                case "flash:raw":
-                    if (args.Count < 2) throw new Exception("usage: fastboot flash:raw <partition> <kernel> [ramdisk [second]] [options]");
-                    ParseBootStyleArgs(args, true,
-                        out string? rawPartition,
-                        out string rawKernel,
-                        out string? rawRamdisk,
-                        out string? rawSecond,
-                        out string? rawDtb,
-                        out string? rawCmdline,
-                        out uint rawHeaderVersion,
-                        out uint rawBaseAddr,
-                        out uint rawPageSize,
-                        out uint rawKernelOffset,
-                        out uint rawRamdiskOffset,
-                        out uint rawSecondOffset,
-                        out uint rawTagsOffset,
-                        out uint rawDtbOffset,
-                        out uint rawOsVersion);
-                    util.FlashRaw(GetPartition(rawPartition!), rawKernel, rawRamdisk, rawSecond, rawDtb, rawCmdline,
-                        rawHeaderVersion, rawBaseAddr, rawPageSize, rawKernelOffset, rawRamdiskOffset, rawSecondOffset,
-                        rawTagsOffset, rawDtbOffset, rawOsVersion).ThrowIfError();
-                    break;
+        if (string.IsNullOrEmpty(formatPartition))
+            throw new Exception("usage: fastboot format[:FS_TYPE[:SIZE]] <partition>");
 
-                case "erase":
-                    if (args.Count == 0) throw new Exception("usage: fastboot erase <partition>");
-                    util.ErasePartition(GetPartition(args[0])).ThrowIfError();
-                    break;
+        util.FormatPartition(getPartition(formatPartition), formatFsType, formatSize, globals.FsOptions).ThrowIfError();
+    }
 
-                case "format":
-                    if (args.Count == 0) throw new Exception("usage: fastboot format[:FS_TYPE[:SIZE]] <partition>");
-                    string formatPartition;
-                    string? formatFsType = null;
-                    long? formatSize = null;
+    private static void ExecuteBoot(FastbootDriver util, BootVerb opts, GlobalOptions globals)
+    {
+        var (dtb, cmdline, headerVersion, baseAddr, pageSize, kernelOffset,
+             ramdiskOffset, secondOffset, tagsOffset, dtbOffset, osVersion) = ResolveBootOptions(globals);
 
-                    if (args.Count == 1)
-                    {
-                        formatPartition = args[0];
-                    }
-                    else if (args.Count == 2)
-                    {
-                        string spec = args[0];
-                        formatPartition = args[1];
-                        var parts = spec.Split(':', StringSplitOptions.None);
-                        if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0])) formatFsType = parts[0];
-                        if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1])) formatSize = ParseSize(parts[1]);
-                    }
-                    else
-                    {
-                        throw new Exception("usage: fastboot format[:FS_TYPE[:SIZE]] <partition>");
-                    }
+        util.Boot(opts.Kernel, opts.Ramdisk, opts.Second, dtb, cmdline,
+            headerVersion, baseAddr, pageSize, kernelOffset, ramdiskOffset,
+            secondOffset, tagsOffset, dtbOffset, osVersion).ThrowIfError();
+    }
 
-                    util.FormatPartition(GetPartition(formatPartition), formatFsType, formatSize, fsOptions).ThrowIfError();
-                    break;
+    private static void ExecuteFlashRaw(FastbootDriver util, FlashRawVerb opts, GlobalOptions globals, Func<string, string> getPartition)
+    {
+        var (dtb, cmdline, headerVersion, baseAddr, pageSize, kernelOffset,
+             ramdiskOffset, secondOffset, tagsOffset, dtbOffset, osVersion) = ResolveBootOptions(globals);
 
-                case "set_active":
-                    string? saSlot = args.Count > 0 ? args[0] : slot;
-                    if (string.IsNullOrEmpty(saSlot))
-                    {
-                        string? current = util.GetVar("current-slot");
-                        saSlot = (current == "a") ? "b" : "a";
-                    }
-                    util.SetActiveSlot(saSlot).ThrowIfError();
-                    break;
+        util.FlashRaw(getPartition(opts.Partition), opts.Kernel, opts.Ramdisk, opts.Second,
+            dtb, cmdline, headerVersion, baseAddr, pageSize, kernelOffset,
+            ramdiskOffset, secondOffset, tagsOffset, dtbOffset, osVersion).ThrowIfError();
+    }
 
-                case "oem":
-                    if (args.Count == 0) throw new Exception("usage: fastboot oem <command>");
-                    util.OemCommand(string.Join(" ", args)).ThrowIfError();
-                    break;
+    private static void ExecuteFetch(FastbootDriver util, FetchVerb opts, Func<string, string> getPartition)
+    {
+        string fetchPart = getPartition(opts.Partition);
 
-                case "flashing":
-                    if (args.Count == 0) throw new Exception("usage: fastboot flashing lock|unlock|lock_critical|unlock_critical|get_unlock_ability");
-                    util.FlashingCommand(string.Join(" ", args)).ThrowIfError();
-                    break;
+        if (opts.Offset != null)
+        {
+            long offset = ParseSize(opts.Offset);
+            long fetchSize = opts.Size != null ? ParseSize(opts.Size) : -1;
+            util.Fetch(fetchPart, opts.OutFile, offset, fetchSize).ThrowIfError();
+        }
+        else
+        {
+            util.Fetch(fetchPart, opts.OutFile).ThrowIfError();
+        }
+    }
 
-                case "create-logical-partition":
-                    if (args.Count < 2) throw new Exception("usage: fastboot create-logical-partition <partition> <size>");
-                    if (!long.TryParse(args[1], out long size)) throw new Exception("Invalid size");
-                    util.CreateLogicalPartition(args[0], size).ThrowIfError();
-                    break;
+    private static (
+        string? dtb, string? cmdline, uint headerVersion, uint baseAddr, uint pageSize,
+        uint kernelOffset, uint ramdiskOffset, uint secondOffset, uint tagsOffset, uint dtbOffset, uint osVersion
+    ) ResolveBootOptions(GlobalOptions globals)
+    {
+        string? dtb = globals.Dtb;
+        string? cmdline = globals.Cmdline;
+        uint headerVersion = ParseUIntOrDefault(globals.HeaderVersion, 0);
+        uint baseAddr = ParseUIntOrDefault(globals.BaseAddr, 0x10000000);
+        uint pageSize = ParseUIntOrDefault(globals.PageSize, 2048);
+        uint kernelOffset = ParseUIntOrDefault(globals.KernelOffset, 0x00008000);
+        uint ramdiskOffset = ParseUIntOrDefault(globals.RamdiskOffset, 0x01000000);
+        uint secondOffset = ParseUIntOrDefault(globals.SecondOffset, 0x00F00000);
+        uint tagsOffset = ParseUIntOrDefault(globals.TagsOffset, 0x00000100);
+        uint dtbOffset = ParseUIntOrDefault(globals.DtbOffset, 0x01100000);
+        uint osVersion = EncodeOsVersion(globals.OsVersion, globals.OsPatchLevel);
 
-                case "delete-logical-partition":
-                    if (args.Count == 0) throw new Exception("usage: fastboot delete-logical-partition <partition>");
-                    util.DeleteLogicalPartition(args[0]).ThrowIfError();
-                    break;
+        return (dtb, cmdline, headerVersion, baseAddr, pageSize, kernelOffset,
+                ramdiskOffset, secondOffset, tagsOffset, dtbOffset, osVersion);
+    }
 
-                case "resize-logical-partition":
-                    if (args.Count < 2) throw new Exception("usage: fastboot resize-logical-partition <partition> <size>");
-                    if (!long.TryParse(args[1], out long rsize)) throw new Exception("Invalid size");
-                    util.ResizeLogicalPartition(args[0], rsize).ThrowIfError();
-                    break;
+    private static uint ParseUIntOrDefault(string? value, uint defaultValue)
+    {
+        if (string.IsNullOrEmpty(value)) return defaultValue;
+        return ParseUIntOption("", value);
+    }
 
-                case "snapshot-update":
-                    string sub = args.Count > 0 ? args[0] : "cancel";
-                    if (sub == "cancel" || sub == "merge") util.SnapshotUpdate(sub).ThrowIfError();
-                    else throw new Exception("usage: fastboot snapshot-update cancel|merge");
-                    break;
+    private static void ExecuteDeviceList(DevicesVerb opts)
+    {
+        bool verbose = opts.ListLong || (opts.Args.Any(a => a == "-l"));
+        foreach (var dev in UsbManager.GetAllDevices())
+        {
+            if (verbose) Console.WriteLine($"{dev.SerialNumber}\tfastboot {dev.GetType().Name}");
+            else Console.WriteLine($"{dev.SerialNumber}\tfastboot");
+            dev.Dispose();
+        }
 
-                case "continue":
-                    util.Continue().ThrowIfError();
-                    break;
+        foreach (var endpoint in LoadSavedNetworkTargets())
+        {
+            if (verbose) Console.WriteLine($"{endpoint}\tfastboot network");
+            else Console.WriteLine($"{endpoint}\tfastboot");
+        }
+    }
 
-                case "stage":
-                    if (args.Count == 0) throw new Exception("usage: fastboot stage <filename>");
-                    util.Stage(File.ReadAllBytes(args[0])).ThrowIfError();
-                    break;
+    private static void ExecuteConnect(ConnectVerb opts)
+    {
+        string endpoint = NormalizeNetworkEndpoint(opts.Endpoint);
+        if (!TryOpenNetworkTransport(endpoint, out IFastbootTransport? transport, out string? error))
+            throw new Exception(string.IsNullOrWhiteSpace(error) ? "failed to connect" : error);
 
-                case "get_staged":
-                    if (args.Count == 0) throw new Exception("usage: fastboot get_staged <outfile>");
-                    util.GetStaged(args[0]);
-                    break;
+        transport!.Dispose();
 
-                case "upload":
-                    if (args.Count < 2) throw new Exception("usage: fastboot upload <name> <outfile>");
-                    util.Upload(args[0], args[1]).ThrowIfError();
-                    break;
+        var endpoints = LoadSavedNetworkTargets();
+        if (!endpoints.Contains(endpoint, StringComparer.OrdinalIgnoreCase))
+        {
+            endpoints.Add(endpoint);
+            SaveNetworkTargets(endpoints);
+        }
 
-                case "gsi":
-                    if (args.Count == 0) throw new Exception("usage: fastboot gsi wipe|disable|status");
-                    util.GsiCommand(args[0]).ThrowIfError();
-                    break;
+        Console.Error.WriteLine("connected " + endpoint);
+    }
 
-                case "wipe-super":
-                    string? emptyImg = args.Count > 0 ? args[0] : null;
-                    if (emptyImg != null) util.UpdateSuper("super", emptyImg, true).ThrowIfError();
-                    else util.WipeSuper("super").ThrowIfError();
-                    break;
+    private static void ExecuteDisconnect(DisconnectVerb opts)
+    {
+        if (string.IsNullOrEmpty(opts.Endpoint))
+        {
+            SaveNetworkTargets(new List<string>());
+            Console.Error.WriteLine("disconnected all network fastboot targets");
+            return;
+        }
 
-                case "boot":
-                    if (args.Count == 0) throw new Exception("usage: fastboot boot <kernel> [ramdisk [second]] [options]");
-                    ParseBootStyleArgs(args, false,
-                        out _,
-                        out string kernel,
-                        out string? ramdisk,
-                        out string? second,
-                        out string? dtb,
-                        out string? cmdline,
-                        out uint headerVersion,
-                        out uint baseAddr,
-                        out uint pageSize,
-                        out uint kernelOffset,
-                        out uint ramdiskOffset,
-                        out uint secondOffset,
-                        out uint tagsOffset,
-                        out uint dtbOffset,
-                        out uint osVersion);
-                    util.Boot(kernel, ramdisk, second, dtb, cmdline, headerVersion, baseAddr, pageSize,
-                        kernelOffset, ramdiskOffset, secondOffset, tagsOffset, dtbOffset, osVersion).ThrowIfError();
-                    break;
+        string endpoint = NormalizeNetworkEndpoint(opts.Endpoint);
+        var endpoints = LoadSavedNetworkTargets();
+        int removed = endpoints.RemoveAll(x => string.Equals(x, endpoint, StringComparison.OrdinalIgnoreCase));
+        SaveNetworkTargets(endpoints);
 
-                case "signature":
-                    if (args.Count == 0) throw new Exception("usage: fastboot signature <signature-file>");
-                    util.Signature(File.ReadAllBytes(args[0])).ThrowIfError();
-                    break;
+        if (removed > 0) Console.Error.WriteLine("disconnected " + endpoint);
+        else Console.Error.WriteLine("no such connection: " + endpoint);
+    }
 
-                default:
-                    throw new NotSupportedException("Command not implemented: " + command);
+    private static FastbootDriver OpenTargetDriver(string? serial)
+    {
+        if (!string.IsNullOrWhiteSpace(serial))
+        {
+            if (TryOpenNetworkTransport(serial, out IFastbootTransport? networkTransport, out string? networkError))
+                return new FastbootDriver(networkTransport!);
+
+            if (LooksLikeNetworkEndpoint(serial))
+                throw new Exception(string.IsNullOrWhiteSpace(networkError) ? "failed to connect network fastboot target" : networkError);
+        }
+
+        var devices = UsbManager.GetAllDevices();
+        UsbDevice? target = null;
+
+        if (serial != null)
+        {
+            target = devices.FirstOrDefault(d => string.Equals(d.SerialNumber, serial, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (devices.Count > 0)
+        {
+            target = devices[0];
+        }
+
+        if (target != null)
+        {
+            foreach (var dev in devices)
+                if (!ReferenceEquals(dev, target)) dev.Dispose();
+            return new FastbootDriver(target);
+        }
+
+        foreach (var dev in devices) dev.Dispose();
+
+        if (serial == null)
+        {
+            if (TryOpenFirstSavedNetworkTarget(out IFastbootTransport? savedTransport))
+                return new FastbootDriver(savedTransport!);
+
+            Console.Error.WriteLine("< waiting for any device >");
+            while (true)
+            {
+                System.Threading.Thread.Sleep(500);
+                var waitedDevices = UsbManager.GetAllDevices();
+                if (waitedDevices.Count > 0)
+                {
+                    var waitedTarget = waitedDevices[0];
+                    for (int idx = 1; idx < waitedDevices.Count; idx++) waitedDevices[idx].Dispose();
+                    return new FastbootDriver(waitedTarget);
+                }
+                foreach (var dev in waitedDevices) dev.Dispose();
+
+                if (TryOpenFirstSavedNetworkTarget(out IFastbootTransport? waitTransport))
+                    return new FastbootDriver(waitTransport!);
             }
         }
 
-        static void ShowHelp()
+        throw new Exception("no devices/found");
+    }
+
+    private static bool TryOpenFirstSavedNetworkTarget(out IFastbootTransport? transport)
+    {
+        foreach (var endpoint in LoadSavedNetworkTargets())
         {
-            Console.Error.WriteLine("Usage: fastboot [-s <serial>] [--slot <slot>] [-w] [-S <size>] [--skip-reboot] [--debug] <command> [args]");
-            Console.Error.WriteLine("\noptions:");
-            Console.Error.WriteLine("  -w                             Wipe userdata and cache after flashing.");
-            Console.Error.WriteLine("  -s <serial>                    Specify device serial (USB or tcp:HOST[:PORT] / udp:HOST[:PORT]).");
-            Console.Error.WriteLine("  --slot <slot>                  Specify active slot (a/b/all/other).");
-            Console.Error.WriteLine("  -a, --set-active[=<slot>]      Sets the active slot. If no slot is provided,");
-            Console.Error.WriteLine("                                 it will set the inactive slot to active.");
-            Console.Error.WriteLine("  -S <size>[k|m|g]               Break into sparse files no larger than SIZE.");
-            Console.Error.WriteLine("  --skip-reboot                  Don't reboot device after flashing all.");
-            Console.Error.WriteLine("  --skip-secondary               Don't flash secondary slots in flashall/update.");
-            Console.Error.WriteLine("  --force                        Ignore compatibility checks for flashall/update.");
-            Console.Error.WriteLine("  --disable-super-optimization   Disable optimized super-partition flashing.");
-            Console.Error.WriteLine("  --exclude-dynamic-partitions   Skip flashing logical dynamic partitions.");
-            Console.Error.WriteLine("  --disable-fastboot-info        Ignore fastboot-info.txt and use image scan fallback.");
-            Console.Error.WriteLine("  --fs-options <opt>             File system options for format (e.g. casefold).");
-            Console.Error.WriteLine("  --disable-verity               Disable dm-verity in vbmeta images.");
-            Console.Error.WriteLine("  --disable-verification         Disable AVB verification in vbmeta images.");
-            Console.Error.WriteLine("  --dtb <file>                   Default DTB file for boot/flash:raw.");
-            Console.Error.WriteLine("  --cmdline <text>               Default kernel cmdline for boot/flash:raw.");
-            Console.Error.WriteLine("  --base <addr>                  Default base address for boot/flash:raw.");
-            Console.Error.WriteLine("  --page-size <bytes>            Default page size for boot/flash:raw.");
-            Console.Error.WriteLine("  --header-version <ver>         Default boot image header version for boot/flash:raw.");
-            Console.Error.WriteLine("  --kernel-offset <addr>         Kernel offset for boot/flash:raw image header.");
-            Console.Error.WriteLine("  --ramdisk-offset <addr>        Ramdisk offset for boot/flash:raw image header.");
-            Console.Error.WriteLine("  --tags-offset <addr>           Tags offset for boot/flash:raw image header.");
-            Console.Error.WriteLine("  --dtb-offset <addr>            DTB offset for boot/flash:raw image header.");
-            Console.Error.WriteLine("  --os-version X[.Y[.Z]]         Android OS version for boot image header.");
-            Console.Error.WriteLine("  --os-patch-level YYYY-MM[-DD]  Android OS patch level for boot image header.");
-            Console.Error.WriteLine("  --unbuffered                   Disable stdio buffering.");
-            Console.Error.WriteLine("  --verbose, -v                  Verbose logging output.");
-            Console.Error.WriteLine("  --convert-simg-to-raw          Convert sparse image to raw image before flashing to avoid 32-bit addressing issues. Defaults to true on 32-bit systems.");
-            Console.Error.WriteLine("  --fallback                     Use platform native USB backend instead of libusb (on Linux libusb is default).");
-
-            Console.Error.WriteLine("\nbasics:");
-            Console.Error.WriteLine("  devices [-l]                   List connected devices.");
-            Console.Error.WriteLine("  connect [tcp:|udp:]HOST[:PORT] Add and validate a network fastboot target.");
-            Console.Error.WriteLine("  disconnect [tcp:|udp:]HOST[:PORT] Remove one or all saved network targets.");
-            Console.Error.WriteLine("  getvar <name> | all            Display bootloader variable.");
-            Console.Error.WriteLine("  reboot [bootloader|fastboot|recovery] Reboot device.");
-            Console.Error.WriteLine("  continue                       Continue with autoboot.");
-
-            Console.Error.WriteLine("\nflashing:");
-            Console.Error.WriteLine("  update <zip>                   Flash all partitions from a zip file.");
-            Console.Error.WriteLine("  flashall                       Flash all partitions from $ANDROID_PRODUCT_OUT.");
-            Console.Error.WriteLine("  flash <partition> [filename]   Write file to partition.");
-            Console.Error.WriteLine("  flash [--disable-verity] [--disable-verification] vbmeta [filename]");
-            Console.Error.WriteLine("  flash vendor_boot:ramdisk <ramdisk_file>");
-            Console.Error.WriteLine("  flash:raw <p> <k> [r [s]] [--dtb file] [--cmdline text] [--base addr]");
-            Console.Error.WriteLine("                                 [--page-size bytes] [--header-version ver] [--kernel-offset addr]");
-            Console.Error.WriteLine("                                 [--ramdisk-offset addr] [--tags-offset addr] [--dtb-offset addr]");
-            Console.Error.WriteLine("                                 [--os-version X.Y.Z] [--os-patch-level YYYY-MM]");
-            Console.Error.WriteLine("  erase <partition>              Erase a flash partition.");
-            Console.Error.WriteLine("  format[:FS_TYPE[:SIZE]] <p>    Format a flash partition.");
-            Console.Error.WriteLine("  set_active <slot>              Set the active slot.");
-
-            Console.Error.WriteLine("\nlocking/unlocking:");
-            Console.Error.WriteLine("  flashing lock|unlock           Lock/unlock partitions.");
-            Console.Error.WriteLine("  flashing lock_critical|...     Lock/unlock critical partitions.");
-            Console.Error.WriteLine("  flashing get_unlock_ability    Check if unlocking is allowed.");
-
-            Console.Error.WriteLine("\nadvanced:");
-            Console.Error.WriteLine("  fetch <p> <outfile> [off [sz]] Fetch a partition from device.");
-            Console.Error.WriteLine("  oem <command>                  Execute OEM-specific command.");
-            Console.Error.WriteLine("  gsi wipe|disable|status        Manage GSI installation.");
-            Console.Error.WriteLine("  wipe-super [super_empty]       Wipe the super partition.");
-            Console.Error.WriteLine("  snapshot-update cancel|merge   Manage snapshot updates.");
-
-            Console.Error.WriteLine("\nlogical partitions:");
-            Console.Error.WriteLine("  create-logical-partition <p> <s>");
-            Console.Error.WriteLine("  delete-logical-partition <p>");
-            Console.Error.WriteLine("  resize-logical-partition <p> <s>");
-
-            Console.Error.WriteLine("\nboot image:");
-            Console.Error.WriteLine("  boot <k> [r [s]] [--dtb file] [--cmdline text] [--base addr]");
-            Console.Error.WriteLine("       [--page-size bytes] [--header-version ver] [--kernel-offset addr]");
-            Console.Error.WriteLine("       [--ramdisk-offset addr] [--tags-offset addr] [--dtb-offset addr]");
-            Console.Error.WriteLine("       [--os-version X.Y.Z] [--os-patch-level YYYY-MM]");
-            Console.Error.WriteLine("                                 Download and boot kernel from RAM.");
-
-            Console.Error.WriteLine("\nAndroid Things / Miscellaneous:");
-            Console.Error.WriteLine("  stage <filename>               Send file to device for next command.");
-            Console.Error.WriteLine("  get_staged <outfile>           Write data staged by last command to file.");
-            Console.Error.WriteLine("  upload <name> <outfile>        Legacy upload (e.g. last_kmsg).");
-            Console.Error.WriteLine("  signature <file>               Send signature blob and install it.");
+            if (TryOpenNetworkTransport(endpoint, out transport, out _))
+                return true;
         }
+        transport = null;
+        return false;
+    }
+
+    private static bool TryOpenNetworkTransport(string endpoint, out IFastbootTransport? transport, out string? error)
+    {
+        transport = null;
+        error = null;
+
+        if (!TryParseNetworkEndpoint(endpoint, out string scheme, out string host, out int port, out string parseError))
+        {
+            error = parseError;
+            return false;
+        }
+
+        try
+        {
+            transport = scheme == "tcp" ? new TcpTransport(host, port) : new UdpTransport(host, port);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            transport = null;
+            return false;
+        }
+    }
+
+    private static bool LooksLikeNetworkEndpoint(string value)
+        => value.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("udp:", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeNetworkEndpoint(string endpoint)
+    {
+        if (!TryParseNetworkEndpoint(endpoint, out string scheme, out string host, out int port, out string error))
+            throw new Exception(error);
+        return $"{scheme}:{host}:{port}";
+    }
+
+    private static bool TryParseNetworkEndpoint(string endpoint, out string scheme, out string host, out int port, out string error)
+    {
+        scheme = "";
+        host = "";
+        port = DefaultNetworkPort;
+        error = "";
+
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            error = "network endpoint is empty";
+            return false;
+        }
+
+        int firstColon = endpoint.IndexOf(':');
+        if (firstColon <= 0)
+        {
+            error = "network endpoint must be tcp:HOST[:PORT] or udp:HOST[:PORT]";
+            return false;
+        }
+
+        scheme = endpoint.Substring(0, firstColon).ToLowerInvariant();
+        if (scheme != "tcp" && scheme != "udp")
+        {
+            error = "network scheme must be tcp or udp";
+            return false;
+        }
+
+        string rest = endpoint.Substring(firstColon + 1);
+        if (string.IsNullOrWhiteSpace(rest))
+        {
+            error = "network endpoint missing host";
+            return false;
+        }
+
+        int portSep = rest.LastIndexOf(':');
+        if (portSep > 0)
+        {
+            host = rest.Substring(0, portSep);
+            string portText = rest.Substring(portSep + 1);
+            if (!int.TryParse(portText, NumberStyles.Integer, CultureInfo.InvariantCulture, out port) || port <= 0 || port > 65535)
+            {
+                error = "invalid network port: " + portText;
+                return false;
+            }
+        }
+        else
+        {
+            host = rest;
+        }
+
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            error = "network endpoint missing host";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string GetNetworkStorePath()
+    {
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FastbootCLI");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "network_targets.txt");
+    }
+
+    private static List<string> LoadSavedNetworkTargets()
+    {
+        string path = GetNetworkStorePath();
+        if (!File.Exists(path)) return new List<string>();
+
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string line in File.ReadAllLines(path))
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Length == 0) continue;
+            if (TryParseNetworkEndpoint(trimmed, out string scheme, out string host, out int port, out _))
+                set.Add($"{scheme}:{host}:{port}");
+        }
+        return set.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static void SaveNetworkTargets(List<string> endpoints)
+    {
+        string path = GetNetworkStorePath();
+        var normalized = endpoints
+            .Select(NormalizeNetworkEndpoint)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        File.WriteAllLines(path, normalized);
+    }
+
+    private static void EnableUnbufferedOutput()
+    {
+        var stdout = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+        Console.SetOut(stdout);
+        var stderr = new StreamWriter(Console.OpenStandardError()) { AutoFlush = true };
+        Console.SetError(stderr);
+    }
+
+    private static long ParseSize(string sizeStr)
+    {
+        long multiplier = 1;
+        char last = char.ToLower(sizeStr[^1]);
+        if (last == 'k') { multiplier = 1024; sizeStr = sizeStr[..^1]; }
+        else if (last == 'm') { multiplier = 1024 * 1024; sizeStr = sizeStr[..^1]; }
+        else if (last == 'g') { multiplier = 1024 * 1024 * 1024; sizeStr = sizeStr[..^1]; }
+        return long.Parse(sizeStr, CultureInfo.InvariantCulture) * multiplier;
+    }
+
+    private static uint ParseUIntOption(string optionName, string value)
+    {
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            if (uint.TryParse(value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint hex))
+                return hex;
+        }
+
+        if (uint.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint parsed))
+            return parsed;
+
+        throw new Exception($"invalid value for {optionName}: {value}");
+    }
+
+    private static uint EncodeOsVersion(string? osVersionText, string? osPatchLevelText)
+    {
+        int major = 0, minor = 0, patch = 0;
+
+        if (!string.IsNullOrWhiteSpace(osVersionText))
+        {
+            string[] parts = osVersionText.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 0) int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out major);
+            if (parts.Length > 1) int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out minor);
+            if (parts.Length > 2) int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out patch);
+        }
+
+        major = Math.Clamp(major, 0, 127);
+        minor = Math.Clamp(minor, 0, 127);
+        patch = Math.Clamp(patch, 0, 127);
+
+        int year = 2000, month = 0;
+        if (!string.IsNullOrWhiteSpace(osPatchLevelText))
+        {
+            string[] patchParts = osPatchLevelText.Split('-', StringSplitOptions.RemoveEmptyEntries);
+            if (patchParts.Length > 0 && int.TryParse(patchParts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y)) year = y;
+            if (patchParts.Length > 1 && int.TryParse(patchParts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int m)) month = m;
+        }
+
+        year = Math.Clamp(year, 2000, 2127);
+        month = Math.Clamp(month, 0, 12);
+
+        uint encodedVersion = (uint)((major << 14) | (minor << 7) | patch);
+        uint encodedPatch = (uint)(((year - 2000) << 4) | month);
+        return (encodedVersion << 11) | encodedPatch;
+    }
+
+    private static void ShowHelp()
+    {
+        Console.Error.WriteLine("Usage: fastboot [-s <serial>] [--slot <slot>] [-w] [-S <size>] [--skip-reboot] [--debug] <command> [args]");
+        Console.Error.WriteLine("\noptions:");
+        Console.Error.WriteLine("  -w                             Wipe userdata and cache after flashing.");
+        Console.Error.WriteLine("  -s <serial>                    Specify device serial (USB or tcp:HOST[:PORT] / udp:HOST[:PORT]).");
+        Console.Error.WriteLine("  --slot <slot>                  Specify active slot (a/b/all/other).");
+        Console.Error.WriteLine("  -a, --set-active[=<slot>]      Sets the active slot. If no slot is provided,");
+        Console.Error.WriteLine("                                 it will set the inactive slot to active.");
+        Console.Error.WriteLine("  -S <size>[k|m|g]               Break into sparse files no larger than SIZE.");
+        Console.Error.WriteLine("  --skip-reboot                  Don't reboot device after flashing all.");
+        Console.Error.WriteLine("  --skip-secondary               Don't flash secondary slots in flashall/update.");
+        Console.Error.WriteLine("  --force                        Ignore compatibility checks for flashall/update.");
+        Console.Error.WriteLine("  --disable-super-optimization   Disable optimized super-partition flashing.");
+        Console.Error.WriteLine("  --exclude-dynamic-partitions   Skip flashing logical dynamic partitions.");
+        Console.Error.WriteLine("  --disable-fastboot-info        Ignore fastboot-info.txt and use image scan fallback.");
+        Console.Error.WriteLine("  --fs-options <opt>             File system options for format (e.g. casefold).");
+        Console.Error.WriteLine("  --disable-verity               Disable dm-verity in vbmeta images. WARNING: Invalidates image signature!");
+        Console.Error.WriteLine("  --disable-verification         Disable AVB verification in vbmeta images. WARNING: Invalidates image signature!");
+        Console.Error.WriteLine("  --dtb <file>                   Default DTB file for boot/flash:raw.");
+        Console.Error.WriteLine("  --cmdline <text>               Default kernel cmdline for boot/flash:raw.");
+        Console.Error.WriteLine("  --base <addr>                  Default base address for boot/flash:raw.");
+        Console.Error.WriteLine("  --page-size <bytes>            Default page size for boot/flash:raw.");
+        Console.Error.WriteLine("  --header-version <ver>         Default boot image header version for boot/flash:raw.");
+        Console.Error.WriteLine("  --kernel-offset <addr>         Kernel offset for boot/flash:raw image header.");
+        Console.Error.WriteLine("  --ramdisk-offset <addr>        Ramdisk offset for boot/flash:raw image header.");
+        Console.Error.WriteLine("  --tags-offset <addr>           Tags offset for boot/flash:raw image header.");
+        Console.Error.WriteLine("  --dtb-offset <addr>            DTB offset for boot/flash:raw image header.");
+        Console.Error.WriteLine("  --os-version X[.Y[.Z]]         Android OS version for boot image header.");
+        Console.Error.WriteLine("  --os-patch-level YYYY-MM[-DD]  Android OS patch level for boot image header.");
+        Console.Error.WriteLine("  --unbuffered                   Disable stdio buffering.");
+        Console.Error.WriteLine("  --verbose, -v                  Verbose logging output.");
+        Console.Error.WriteLine("  --convert-simg-to-raw          Convert sparse image to raw image before flashing.");
+        Console.Error.WriteLine("  --fallback                     Use platform native USB backend instead of libusb.");
+
+        Console.Error.WriteLine("\nbasics:");
+        Console.Error.WriteLine("  devices [-l]                   List connected devices.");
+        Console.Error.WriteLine("  connect [tcp:|udp:]HOST[:PORT] Add and validate a network fastboot target.");
+        Console.Error.WriteLine("  disconnect [tcp:|udp:]HOST[:PORT] Remove one or all saved network targets.");
+        Console.Error.WriteLine("  getvar <name> | all            Display bootloader variable.");
+        Console.Error.WriteLine("  reboot [bootloader|fastboot|recovery] Reboot device.");
+        Console.Error.WriteLine("  continue                       Continue with autoboot.");
+
+        Console.Error.WriteLine("\nflashing:");
+        Console.Error.WriteLine("  update <zip>                   Flash all partitions from a zip file.");
+        Console.Error.WriteLine("  flashall                       Flash all partitions from $ANDROID_PRODUCT_OUT.");
+        Console.Error.WriteLine("  flash <partition> [filename]   Write file to partition.");
+        Console.Error.WriteLine("  flash [--disable-verity] [--disable-verification] vbmeta [filename]");
+        Console.Error.WriteLine("  flash vendor_boot:ramdisk <ramdisk_file>");
+        Console.Error.WriteLine("  flash:raw <p> <k> [r [s]]     Create and flash a raw boot image to a partition.");
+        Console.Error.WriteLine("  erase <partition>              Erase a flash partition.");
+        Console.Error.WriteLine("  format[:FS_TYPE[:SIZE]] <p>    Format a flash partition.");
+        Console.Error.WriteLine("  set_active <slot>              Set the active slot.");
+
+        Console.Error.WriteLine("\nlocking/unlocking:");
+        Console.Error.WriteLine("  flashing lock|unlock           Lock/unlock partitions.");
+        Console.Error.WriteLine("  flashing lock_critical|...     Lock/unlock critical partitions.");
+        Console.Error.WriteLine("  flashing get_unlock_ability    Check if unlocking is allowed.");
+
+        Console.Error.WriteLine("\nadvanced:");
+        Console.Error.WriteLine("  fetch <p> <outfile> [off [sz]] Fetch a partition from device.");
+        Console.Error.WriteLine("  oem <command>                  Execute OEM-specific command.");
+        Console.Error.WriteLine("  gsi wipe|disable|status        Manage GSI installation.");
+        Console.Error.WriteLine("  wipe-super [super_empty]       Wipe the super partition.");
+        Console.Error.WriteLine("  snapshot-update cancel|merge   Manage snapshot updates.");
+
+        Console.Error.WriteLine("\nlogical partitions:");
+        Console.Error.WriteLine("  create-logical-partition <p> <s>");
+        Console.Error.WriteLine("  delete-logical-partition <p>");
+        Console.Error.WriteLine("  resize-logical-partition <p> <s>");
+
+        Console.Error.WriteLine("\nboot image:");
+        Console.Error.WriteLine("  boot <k> [r [s]]              Download and boot kernel from RAM.");
+
+        Console.Error.WriteLine("\nAndroid Things / Miscellaneous:");
+        Console.Error.WriteLine("  stage <filename>               Send file to device for next command.");
+        Console.Error.WriteLine("  get_staged <outfile>           Write data staged by last command to file.");
+        Console.Error.WriteLine("  upload <name> <outfile>        Legacy upload (e.g. last_kmsg).");
+        Console.Error.WriteLine("  signature <file>               Send signature blob and install it.");
     }
 }

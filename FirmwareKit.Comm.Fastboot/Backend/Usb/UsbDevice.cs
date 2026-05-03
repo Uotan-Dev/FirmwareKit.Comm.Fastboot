@@ -33,12 +33,6 @@ public abstract class UsbDevice : IFastbootBufferedTransport
     public ushort ProductId { get; set; }
 
     /// <summary>
-    /// Gets or sets the USB device type (platform-specific).
-    /// <para>获取或设置 USB 设备类型（平台特定）。</para>
-    /// </summary>
-    public UsbDeviceType UsbDeviceType { get; set; }
-
-    /// <summary>
     /// Reads data from the USB device with the specified maximum length.
     /// <para>从 USB 设备读取指定最大长度的数据。</para>
     /// </summary>
@@ -90,21 +84,6 @@ public abstract class UsbDevice : IFastbootBufferedTransport
     /// <para>释放 USB 设备句柄及所有关联资源。</para>
     /// </summary>
     public abstract void Dispose();
-}
-
-/// <summary>
-/// Specifies the USB device backend type.
-/// <para>指定 USB 设备后端类型。</para>
-/// </summary>
-public enum UsbDeviceType
-{
-    WinLegacy = 0,
-    WinUSB = 1,
-    Linux = 2,
-    LibUSB = 3,
-    MacOS = 4
-
-
 }
 
 

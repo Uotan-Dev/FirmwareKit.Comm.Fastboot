@@ -1,5 +1,4 @@
 using FirmwareKit.Comm.Usb.Abstractions;
-using System.Runtime.InteropServices;
 
 namespace FirmwareKit.Comm.Fastboot.Usb;
 
@@ -29,7 +28,6 @@ public sealed class CommUsbDevice : UsbDevice
         SerialNumber = _deviceInfo.SerialNumber;
         VendorId = _deviceInfo.VendorId;
         ProductId = _deviceInfo.ProductId;
-        UsbDeviceType = ToUsbDeviceType(_deviceInfo.SourceApiKind);
     }
 
     /// <summary>
@@ -158,30 +156,5 @@ public sealed class CommUsbDevice : UsbDevice
         }
 
         return UsbApiKind.Native;
-    }
-
-    private static UsbDeviceType ToUsbDeviceType(UsbApiKind apiKind)
-    {
-        if (apiKind == UsbApiKind.LibUsbDotNet)
-        {
-            return UsbDeviceType.LibUSB;
-        }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return UsbDeviceType.WinUSB;
-        }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            return UsbDeviceType.Linux;
-        }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            return UsbDeviceType.MacOS;
-        }
-
-        return UsbDeviceType.LibUSB;
     }
 }

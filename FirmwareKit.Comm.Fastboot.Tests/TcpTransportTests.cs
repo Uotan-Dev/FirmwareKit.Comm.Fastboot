@@ -3,7 +3,6 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using Xunit;
 
 namespace FirmwareKit.Comm.Fastboot.Tests
 {

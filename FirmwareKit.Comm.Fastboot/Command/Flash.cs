@@ -111,12 +111,29 @@ public partial class FastbootDriver
 
             NotifyCurrentStep($"Converting large raw image to sparse chunks for {partition}...");
             stream.Seek(originalPosition, SeekOrigin.Begin);
-            using (var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false))
+
+            const int blockSize = 4096;
+            long alignedSize = ((imageSize + blockSize - 1) / blockSize) * blockSize;
+
+            using var rawSparseImage = new SparseFile(blockSize, alignedSize);
+
+            var rawData = new byte[alignedSize];
+            int totalRead = 0;
+            while (totalRead < imageSize)
             {
-                var resp = FlashSparseFile(partition, sparseImage, maxDownloadSize);
-                success = resp.Result == FastbootState.Success;
-                return resp;
+                int read = stream.Read(rawData, totalRead, (int)(imageSize - totalRead));
+                if (read == 0) break;
+                totalRead += read;
             }
+
+            if (totalRead > 0)
+            {
+                rawSparseImage.AddRawChunk(rawData);
+            }
+
+            var rawResp = FlashSparseFile(partition, rawSparseImage, maxDownloadSize);
+            success = rawResp.Result == FastbootState.Success;
+            return rawResp;
         }
         finally
         {

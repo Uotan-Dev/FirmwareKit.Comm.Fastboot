@@ -2,7 +2,6 @@ using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
 using System.IO.Compression;
-using System.Text;
 
 namespace FirmwareKit.Comm.Fastboot;
 
@@ -187,6 +186,14 @@ public partial class FastbootDriver : IDisposable
     /// <para>稀疏镜像传输的最大下载大小。</para>
     /// </summary>
     public static long SparseMaxDownloadSize = uint.MaxValue;
+
+    private static readonly string[] VbmetaPartitionNames =
+    [
+        "vbmeta", "vbmeta_system", "vbmeta_vendor", "vbmeta_custom"
+    ];
+
+    private static readonly HashSet<string> VbmetaPartitionSet =
+        new(VbmetaPartitionNames, StringComparer.OrdinalIgnoreCase);
 
     private static readonly string[] PartitionPriority =
     [
@@ -378,6 +385,28 @@ public partial class FastbootDriver : IDisposable
         var res = resObj.Response;
         if (useCache) _varCache[key] = res;
         return res;
+    }
+
+    /// <summary>
+    /// Queries a single device variable by key and returns detailed result including error information.
+    /// <para>按键查询单个设备变量并返回包含错误信息的详细结果。</para>
+    /// </summary>
+    public (string Value, bool Success, string? ErrorMessage) GetVarWithResult(string key, bool useCache = true, bool quiet = false)
+    {
+        FastbootDebug.Log($"GetVarWithResult(key={key}, useCache={useCache}, quiet={quiet})");
+        if (useCache && _varCache.TryGetValue(key, out string? cached)) return (cached, true, null);
+        var resObj = RawCommand("getvar:" + key, quiet);
+        if (resObj.Result is FastbootState.Fail)
+        {
+            return ("", false, resObj.Response);
+        }
+        if (resObj.Result is FastbootState.Timeout)
+        {
+            return ("", false, "Timeout waiting for device response");
+        }
+        var res = resObj.Response;
+        if (useCache) _varCache[key] = res;
+        return (res, true, null);
     }
 
     /// <summary>
@@ -934,11 +963,25 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Checks whether the specified partition name starts with "vbmeta".
-    /// <para>检查指定分区名称是否以 "vbmeta" 开头。</para>
+    /// Checks whether the specified partition name is a known vbmeta partition.
+    /// <para>检查指定分区名称是否为已知的 vbmeta 分区。</para>
     /// </summary>
     public bool IsVbmetaPartition(string partition)
-        => partition.StartsWith("vbmeta", StringComparison.OrdinalIgnoreCase);
+    {
+        if (string.IsNullOrWhiteSpace(partition)) return false;
+        string partName = partition;
+        int underscoreIndex = partition.LastIndexOf('_');
+        if (underscoreIndex > 0)
+        {
+            string suffix = partition.Substring(underscoreIndex + 1);
+            if (suffix.Equals("a", StringComparison.OrdinalIgnoreCase) ||
+                suffix.Equals("b", StringComparison.OrdinalIgnoreCase))
+            {
+                partName = partition.Substring(0, underscoreIndex);
+            }
+        }
+        return VbmetaPartitionSet.Contains(partName);
+    }
 
     /// <summary>
     /// Checks whether the fastboot-info.txt version is supported (version ≤ 2).

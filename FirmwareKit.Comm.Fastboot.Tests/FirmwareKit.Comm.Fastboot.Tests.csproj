@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FirmwareKit.Comm.Fastboot\FirmwareKit.Comm.Fastboot.csproj" />
+    <ProjectReference Include="..\FastbootCLI\FastbootCLI.csproj" />
   </ItemGroup>
 
 </Project>

@@ -28,6 +28,7 @@ public partial class FastbootDriver
         }
         if (response.DataSize != data.Length)
         {
+            FastbootDebug.Log($"Download size mismatch: requested {data.Length} bytes, device accepted {response.DataSize} bytes");
             return new FastbootResponse
             {
                 Result = FastbootState.Fail,
