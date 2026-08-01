@@ -5,6 +5,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Root namespace follows the FirmwareKit ecosystem package naming convention. -->
+    <RootNamespace>FirmwareKit.Comm.Fastboot.Cli</RootNamespace>
+    <PackageId>FirmwareKit.Comm.Fastboot.Cli</PackageId>
+    <!-- Keep the produced executable named "fastboot" so it stays a drop-in replacement
+         for the official Google fastboot command line. -->
     <AssemblyName>fastboot</AssemblyName>
     <PublishAot>true</PublishAot>
     <IsAotCompatible>true</IsAotCompatible>

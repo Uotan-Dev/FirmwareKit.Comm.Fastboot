@@ -1,5 +1,5 @@
 using CommandLine;
-using FastbootCLI.Options;
+using FirmwareKit.Comm.Fastboot.Cli.Options;
 
 namespace FirmwareKit.Comm.Fastboot.Tests;
 

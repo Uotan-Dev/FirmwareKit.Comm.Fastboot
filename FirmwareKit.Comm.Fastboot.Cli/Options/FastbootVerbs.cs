@@ -1,6 +1,6 @@
 using CommandLine;
 
-namespace FastbootCLI.Options;
+namespace FirmwareKit.Comm.Fastboot.Cli.Options;
 
 [Verb("devices", HelpText = "List connected devices.")]
 public class DevicesVerb : GlobalOptions

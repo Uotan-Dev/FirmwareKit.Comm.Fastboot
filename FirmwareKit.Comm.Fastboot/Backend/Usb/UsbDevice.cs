@@ -86,5 +86,3 @@ public abstract class UsbDevice : IFastbootBufferedTransport
     public abstract void Dispose();
 }
 
-
-

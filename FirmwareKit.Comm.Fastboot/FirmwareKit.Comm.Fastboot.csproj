@@ -10,18 +10,20 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Authors>ZZi_Cai</Authors>
     <Description>A high-performance .NET implementation of the Android Fastboot protocol, strictly aligned with AOSP logic. Part of the FirmwareKit ecosystem.</Description>
-    <PackageProjectUrl>https://github.com/uotan-Dev/SharpFastboot</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/uotan-Dev/SharpFastboot</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Uotan-Dev/FirmwareKit.Comm.Fastboot</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Uotan-Dev/FirmwareKit.Comm.Fastboot</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-	<RepositoryType>git</RepositoryType>
-	<PublishRepositoryUrl>true</PublishRepositoryUrl>
-	<IncludeSymbols>true</IncludeSymbols>
-	<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>fastboot;android;firmware;flashing;usb;tcp;udp;adb</PackageTags>
-    <Version>1.0.3</Version>
+    <Copyright>Copyright (c) 2026 ZZi_Cai</Copyright>
+    <PackageReleaseNotes>1.1.0 - Multi-command CLI (CommandLineParser), -i vendor-id filter, official devices -l format, device capability probing, VID/PID whitelist discovery (devices.json), AOT-safe manifest loader, U-Boot oem ucmd/acmd, monotonic timeouts, AVB-based vbmeta flag editing.</PackageReleaseNotes>
+    <Version>1.1.0</Version>
     <PackageId>FirmwareKit.Comm.Fastboot</PackageId>
-    <Product>FastbootCli</Product>
+    <Product>FirmwareKit.Comm.Fastboot</Product>
   </PropertyGroup>
 
   <ItemGroup>

@@ -370,3 +370,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 FastbootCLI/Properties/launchSettings.json
+FirmwareKit.Comm.Fastboot.Cli/Properties/launchSettings.json

@@ -41,15 +41,23 @@ public sealed class CommUsbDevice : UsbDevice
             return 0;
         }
 
+        // When the interface descriptor was actually observed from the device, constrain the
+        // session by those real values. Otherwise (e.g. macOS backend, or devices discovered
+        // through the VID/PID whitelist fallback) leave interface fields unconstrained so that
+        // devices with non-standard fastboot interfaces can still be opened.
+        byte? interfaceClass = _deviceInfo.InterfaceMetadataObserved ? _deviceInfo.InterfaceClass : null;
+        byte? interfaceSubClass = _deviceInfo.InterfaceMetadataObserved ? _deviceInfo.InterfaceSubClass : null;
+        byte? interfaceProtocol = _deviceInfo.InterfaceMetadataObserved ? _deviceInfo.InterfaceProtocol : null;
+
         var filter = new UsbDeviceFilter
         {
             VendorId = _deviceInfo.VendorId,
             ProductId = _deviceInfo.ProductId,
             SerialNumber = _deviceInfo.SerialNumber,
             DevicePathContains = string.IsNullOrWhiteSpace(_deviceInfo.DevicePath) ? null : _deviceInfo.DevicePath,
-            InterfaceClass = _deviceInfo.InterfaceClass ?? 0xFF,
-            InterfaceSubClass = _deviceInfo.InterfaceSubClass ?? 0x42,
-            InterfaceProtocol = _deviceInfo.InterfaceProtocol ?? 0x03,
+            InterfaceClass = interfaceClass,
+            InterfaceSubClass = interfaceSubClass,
+            InterfaceProtocol = interfaceProtocol,
         };
 
         _session = _comm.OpenUsbDeviceSession(ResolveApiKind(), filter);

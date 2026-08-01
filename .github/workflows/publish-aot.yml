@@ -47,7 +47,7 @@ jobs:
 
       - name: Publish AOT
         run: |
-          dotnet publish FastbootCLI/FastbootCLI.csproj -c Release -r ${{ matrix.rid }} -o ./publish/${{ matrix.rid }} --self-contained
+          dotnet publish FirmwareKit.Comm.Fastboot.Cli/FirmwareKit.Comm.Fastboot.Cli.csproj -c Release -r ${{ matrix.rid }} -o ./publish/${{ matrix.rid }} --self-contained
 
       - name: Zip Artifacts
         shell: pwsh

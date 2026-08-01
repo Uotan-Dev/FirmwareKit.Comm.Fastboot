@@ -6,6 +6,12 @@ namespace FirmwareKit.Comm.Fastboot;
 public partial class FastbootDriver
 {
     /// <summary>
+    /// Maximum fastboot command length in bytes, matching AOSP FB_COMMAND_SZ.
+    /// <para>fastboot 命令最大长度（字节），与 AOSP FB_COMMAND_SZ 一致。</para>
+    /// </summary>
+    private const int FB_COMMAND_SZ = 4096;
+
+    /// <summary>
     /// Sends a raw fastboot command to the device and returns the response.
     /// This is the core method for executing all fastboot protocol commands.
     /// <para>向设备发送原始 fastboot 命令并返回响应。
@@ -17,7 +23,18 @@ public partial class FastbootDriver
     public FastbootResponse RawCommand(string command, bool quiet = false)
     {
         FastbootDebug.Log("Sending command: " + command);
+
         byte[] cmdBytes = Encoding.UTF8.GetBytes(command);
+        if (cmdBytes.Length > FB_COMMAND_SZ)
+        {
+            FastbootDebug.Log($"Command length {cmdBytes.Length} exceeds FB_COMMAND_SZ ({FB_COMMAND_SZ})");
+            return new FastbootResponse
+            {
+                Result = FastbootState.Fail,
+                Response = $"command length to RawCommand() is too long ({cmdBytes.Length} > {FB_COMMAND_SZ})"
+            };
+        }
+
         try
         {
             int bytesWritten = (int)Transport.Write(cmdBytes, cmdBytes.Length);
@@ -49,9 +66,3 @@ public partial class FastbootDriver
         return response;
     }
 }
-
-
-
-
-
-

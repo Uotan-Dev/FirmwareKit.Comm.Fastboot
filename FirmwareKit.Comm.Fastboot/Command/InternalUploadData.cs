@@ -63,8 +63,6 @@ public partial class FastbootDriver
 
         return HandleResponse();
     }
-
-
 }
 
 

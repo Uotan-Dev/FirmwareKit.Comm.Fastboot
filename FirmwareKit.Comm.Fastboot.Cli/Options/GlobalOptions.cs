@@ -1,11 +1,14 @@
 using CommandLine;
 
-namespace FastbootCLI.Options;
+namespace FirmwareKit.Comm.Fastboot.Cli.Options;
 
 public class GlobalOptions
 {
     [Option('s', "serial", HelpText = "Specify device serial number (USB or tcp:HOST[:PORT] / udp:HOST[:PORT]).")]
     public string? Serial { get; set; }
+
+    [Option('i', "vendor-id", HelpText = "Specify a custom USB vendor id (hex, e.g. 0x2207 for Rockchip).")]
+    public string? VendorId { get; set; }
 
     [Option("slot", HelpText = "Specify active slot (a/b/all/other).")]
     public string? Slot { get; set; }

@@ -53,6 +53,7 @@ public partial class FastbootDriver : IDisposable
     public bool IsUserspace()
     {
         FastbootDebug.Log("IsUserspace()");
+        if (Capabilities?.IsUserspace is bool probed) return probed;
         try
         {
             return GetVar("is-userspace", useCache: false, quiet: true) == "yes";
@@ -308,8 +309,9 @@ public partial class FastbootDriver : IDisposable
     public static FastbootDriver? WaitForDevice(Func<List<UsbDevice>> deviceFinder, string? serial = null, int timeoutSeconds = -1)
     {
         FastbootDebug.Log($"WaitForDevice(deviceFinder={deviceFinder}, serial={serial}, timeoutSeconds={timeoutSeconds})");
-        DateTime start = DateTime.Now;
-        while (timeoutSeconds == -1 || (DateTime.Now - start).TotalSeconds < timeoutSeconds)
+        long startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        while (timeoutSeconds == -1 ||
+               (System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) < System.Diagnostics.Stopwatch.Frequency * (long)timeoutSeconds)
         {
             var devices = deviceFinder();
             UsbDevice? found = string.IsNullOrEmpty(serial)
@@ -444,6 +446,14 @@ public partial class FastbootDriver : IDisposable
     {
         if (IsUserspace()) return;
 
+        // Devices that do not report is-userspace (e.g. U-Boot boards, legacy bootloaders)
+        // cannot boot into userspace fastboot; fail fast instead of issuing reboot-fastboot.
+        if (Capabilities?.IsUserspace is null or false)
+        {
+            throw new NotSupportedException(
+                "Device does not support userspace fastboot (is-userspace not reported); cannot boot into fastbootd.");
+        }
+
         NotifyCurrentStep("Operation requires fastbootd, rebooting...");
         Reboot("fastboot").ThrowIfError();
 
@@ -462,8 +472,8 @@ public partial class FastbootDriver : IDisposable
             _ => throw new NotSupportedException("Automatic reboot to userspace is only supported for USB, TCP and UDP transports.")
         };
 
-        DateTime userspaceWaitStart = DateTime.Now;
-        while ((DateTime.Now - userspaceWaitStart).TotalSeconds < 30)
+        long userspaceWaitStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        while ((System.Diagnostics.Stopwatch.GetTimestamp() - userspaceWaitStart) < System.Diagnostics.Stopwatch.Frequency * 30)
         {
             if (IsUserspace()) goto enteredUserspace;
             System.Threading.Thread.Sleep(1000);
@@ -476,8 +486,8 @@ public partial class FastbootDriver : IDisposable
 
     private IFastbootTransport? ReconnectNetworkTransport(string host, int port, Func<string, int, IFastbootTransport> createTransport)
     {
-        DateTime start = DateTime.Now;
-        while ((DateTime.Now - start).TotalSeconds < 60)
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        while ((System.Diagnostics.Stopwatch.GetTimestamp() - start) < System.Diagnostics.Stopwatch.Frequency * 60)
         {
             try
             {
@@ -554,6 +564,11 @@ public partial class FastbootDriver : IDisposable
     /// </summary>
     public long GetMaxDownloadSize()
     {
+        if (Capabilities?.MaxDownloadSize is long probedMax && probedMax > 0)
+        {
+            return Math.Min(Math.Min(probedMax, SparseMaxDownloadSize), uint.MaxValue);
+        }
+
         string? sizeStr = null;
         try { sizeStr = GetVar("max-download-size"); } catch { }
         if (string.IsNullOrEmpty(sizeStr)) return SparseMaxDownloadSize;
@@ -569,7 +584,11 @@ public partial class FastbootDriver : IDisposable
     /// Checks whether the device supports CRC verification for data transfers.
     /// <para>检查设备是否支持数据传输的 CRC 校验。</para>
     /// </summary>
-    public bool HasCrc() => TryGetVar("has-crc", out var v) && v == "yes";
+    public bool HasCrc()
+    {
+        if (Capabilities?.HasCrc is bool probed) return probed;
+        return TryGetVar("has-crc", out var v) && v == "yes";
+    }
 
     /// <summary>
     /// Checks whether the specified partition exists on the device.
@@ -664,8 +683,8 @@ public partial class FastbootDriver : IDisposable
     /// </summary>
     public void WaitForSnapshotMerge(int timeoutSeconds = 600)
     {
-        DateTime start = DateTime.Now;
-        while ((DateTime.Now - start).TotalSeconds < timeoutSeconds)
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        while ((System.Diagnostics.Stopwatch.GetTimestamp() - start) < System.Diagnostics.Stopwatch.Frequency * (long)timeoutSeconds)
         {
             var res = GetVar("snapshot-update-status");
             if (res == "merging")
@@ -716,7 +735,12 @@ public partial class FastbootDriver : IDisposable
     /// <para>检查指定分区是否为设备上的逻辑分区。</para>
     /// </summary>
     public bool IsLogical(string partition)
-        => TryGetVar("is-logical:" + partition, out var v) && v == "yes";
+    {
+        // Devices without dynamic partition metadata (e.g. U-Boot boards) do not support
+        // the is-logical variable; treat everything as physical instead of failing loudly.
+        if (Capabilities?.SupportsLogicalPartitions == false) return false;
+        return TryGetVar("is-logical:" + partition, out var v) && v == "yes";
+    }
 
     /// <summary>
     /// Gets the size of the specified partition as a long integer (in bytes or hex).

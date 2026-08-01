@@ -1,11 +1,11 @@
 using CommandLine;
-using FastbootCLI.Options;
+using FirmwareKit.Comm.Fastboot.Cli.Options;
 using FirmwareKit.Comm.Fastboot;
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using System.Globalization;
 
-namespace FastbootCLI;
+namespace FirmwareKit.Comm.Fastboot.Cli;
 
 class Program
 {
@@ -250,7 +250,7 @@ class Program
         if (!string.IsNullOrEmpty(globals.SparseSize))
             sparseLimit = ParseSize(globals.SparseSize);
 
-        using FastbootDriver util = OpenTargetDriver(globals.Serial);
+        using FastbootDriver util = OpenTargetDriver(globals.Serial, globals.VendorId);
         util.ConvertSimgToRaw = convertSimgToRaw;
 
         if (sparseLimit.HasValue)
@@ -719,16 +719,25 @@ class Program
     private static void ExecuteDeviceList(DevicesVerb opts)
     {
         bool verbose = opts.ListLong || (opts.Args.Any(a => a == "-l"));
-        foreach (var dev in UsbManager.GetAllDevices())
+        foreach (var dev in GetAllDevicesFiltered(opts.VendorId))
         {
-            if (verbose) Console.WriteLine($"{dev.SerialNumber}\tfastboot {dev.GetType().Name}");
-            else Console.WriteLine($"{dev.SerialNumber}\tfastboot");
+            // Match official fastboot: "SERIAL\tfastboot\t<interface>" for -l,
+            // where the third column is the device path (falling back to "fastboot").
+            if (verbose)
+            {
+                string interfaceName = string.IsNullOrWhiteSpace(dev.DevicePath) ? "fastboot" : dev.DevicePath;
+                Console.WriteLine($"{dev.SerialNumber}\tfastboot\t{interfaceName}");
+            }
+            else
+            {
+                Console.WriteLine($"{dev.SerialNumber}\tfastboot");
+            }
             dev.Dispose();
         }
 
         foreach (var endpoint in LoadSavedNetworkTargets())
         {
-            if (verbose) Console.WriteLine($"{endpoint}\tfastboot network");
+            if (verbose) Console.WriteLine($"{endpoint}\tfastboot\t{endpoint}");
             else Console.WriteLine($"{endpoint}\tfastboot");
         }
     }
@@ -769,7 +778,7 @@ class Program
         else Console.Error.WriteLine("no such connection: " + endpoint);
     }
 
-    private static FastbootDriver OpenTargetDriver(string? serial)
+    private static FastbootDriver OpenTargetDriver(string? serial, string? vendorId)
     {
         if (!string.IsNullOrWhiteSpace(serial))
         {
@@ -780,7 +789,7 @@ class Program
                 throw new Exception(string.IsNullOrWhiteSpace(networkError) ? "failed to connect network fastboot target" : networkError);
         }
 
-        var devices = UsbManager.GetAllDevices();
+        var devices = GetAllDevicesFiltered(vendorId);
         UsbDevice? target = null;
 
         if (serial != null)
@@ -810,7 +819,7 @@ class Program
             while (true)
             {
                 System.Threading.Thread.Sleep(500);
-                var waitedDevices = UsbManager.GetAllDevices();
+                var waitedDevices = GetAllDevicesFiltered(vendorId);
                 if (waitedDevices.Count > 0)
                 {
                     var waitedTarget = waitedDevices[0];
@@ -825,6 +834,30 @@ class Program
         }
 
         throw new Exception("no devices/found");
+    }
+
+    /// <summary>
+    /// Enumerates USB fastboot devices, optionally filtered by the -i vendor id option.
+    /// <para>枚举 USB fastboot 设备，可依据 -i 厂商 ID 选项过滤。</para>
+    /// </summary>
+    private static List<UsbDevice> GetAllDevicesFiltered(string? vendorId)
+    {
+        var devices = UsbManager.GetAllDevices();
+        if (string.IsNullOrWhiteSpace(vendorId)) return devices;
+        ushort vid = ParseVendorId(vendorId);
+        return devices.Where(d => d.VendorId == vid).ToList();
+    }
+
+    private static ushort ParseVendorId(string value)
+    {
+        string hex = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? value.Substring(2) : value;
+        if (ushort.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ushort vid))
+            return vid;
+
+        if (ushort.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort dec))
+            return dec;
+
+        throw new Exception($"invalid vendor id: {value} (expected hex like 0x2207)");
     }
 
     private static bool TryOpenFirstSavedNetworkTarget(out IFastbootTransport? transport)
@@ -933,7 +966,7 @@ class Program
 
     private static string GetNetworkStorePath()
     {
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FastbootCLI");
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FirmwareKit.Comm.Fastboot.Cli");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "network_targets.txt");
     }
@@ -1031,10 +1064,11 @@ class Program
 
     private static void ShowHelp()
     {
-        Console.Error.WriteLine("Usage: fastboot [-s <serial>] [--slot <slot>] [-w] [-S <size>] [--skip-reboot] [--debug] <command> [args]");
+        Console.Error.WriteLine("Usage: fastboot [-s <serial>] [-i <vendor-id>] [--slot <slot>] [-w] [-S <size>] [--skip-reboot] [--debug] <command> [args]");
         Console.Error.WriteLine("\noptions:");
         Console.Error.WriteLine("  -w                             Wipe userdata and cache after flashing.");
         Console.Error.WriteLine("  -s <serial>                    Specify device serial (USB or tcp:HOST[:PORT] / udp:HOST[:PORT]).");
+        Console.Error.WriteLine("  -i <vendor-id>                 Specify a custom USB vendor id (hex, e.g. 0x2207 for Rockchip).");
         Console.Error.WriteLine("  --slot <slot>                  Specify active slot (a/b/all/other).");
         Console.Error.WriteLine("  -a, --set-active[=<slot>]      Sets the active slot. If no slot is provided,");
         Console.Error.WriteLine("                                 it will set the inactive slot to active.");
@@ -1071,6 +1105,13 @@ class Program
         Console.Error.WriteLine("  getvar <name> | all            Display bootloader variable.");
         Console.Error.WriteLine("  reboot [bootloader|fastboot|recovery] Reboot device.");
         Console.Error.WriteLine("  continue                       Continue with autoboot.");
+
+        Console.Error.WriteLine("\nnetwork fastboot (U-Boot / fastbootd over TCP or UDP):");
+        Console.Error.WriteLine("  tcp:HOST[:PORT]                Connect over TCP (default port 5554).");
+        Console.Error.WriteLine("                                 Supports U-Boot fastboot and userspace fastbootd.");
+        Console.Error.WriteLine("  udp:HOST[:PORT]                Connect over UDP fastboot (default port 5554).");
+        Console.Error.WriteLine("  -s tcp:HOST[:PORT]             Target a specific network device without connect.");
+        Console.Error.WriteLine("  -s udp:HOST[:PORT]             Target a specific UDP fastboot device.");
 
         Console.Error.WriteLine("\nflashing:");
         Console.Error.WriteLine("  update <zip>                   Flash all partitions from a zip file.");

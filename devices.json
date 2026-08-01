@@ -1,0 +1,128 @@
+{
+  "$comment": "Fastboot device profiles (VID/PID whitelist) for FirmwareKit.Comm.Fastboot. Load with UsbManager.LoadDeviceProfilesFromFile() or copy entries into UsbManager.KnownDeviceProfiles. Used as a discovery fallback for devices whose interface descriptor is not the standard fastboot interface (0xff/0x42/0x03). productId may be null to match any product under the vendor.",
+  "profiles": [
+    {
+      "name": "Google (Android/AOSP)",
+      "vendorId": "0x18D1",
+      "productId": null,
+      "note": "Standard fastboot interface; found by interface filter. Listed for reference.",
+      "bootloaderEntry": "fastboot mode via adb reboot bootloader or key combo",
+      "knownLimitations": []
+    },
+    {
+      "name": "Amazon Kindle Fire (stock bootloader)",
+      "vendorId": "0x1949",
+      "productId": "0x0006",
+      "note": "Non-standard fastboot interface in some firmware revisions; needs VID/PID fallback.",
+      "bootloaderEntry": "Fastboot cable (factory cable) or bootmode 4002 via oem idme",
+      "knownLimitations": [
+        "Interface descriptor may not be 0xff/0x42/0x03",
+        "Requires fastboot cable or bootmode manipulation"
+      ]
+    },
+    {
+      "name": "Amazon Kindle Fire (FireFireFire bootloader)",
+      "vendorId": "0x18D1",
+      "productId": "0x0100",
+      "note": "FFF bootloader exposes standard fastboot.",
+      "bootloaderEntry": "Fastboot cable or bootmode 4002",
+      "knownLimitations": []
+    },
+    {
+      "name": "Fuzhou Rockchip Electronics (U-Boot fastboot)",
+      "vendorId": "0x2207",
+      "productId": null,
+      "note": "U-Boot fastboot gadget on RK3xxx/RK2xxx dev boards (e.g. NanoPi, Rock Pi). MaskROM/rockusb mode is a different protocol, not fastboot.",
+      "bootloaderEntry": "fastboot 0 in U-Boot console, or adb reboot fastboot on Android builds",
+      "knownLimitations": [
+        "MaskROM mode (0x2207:0x330c etc.) is rockusb protocol, NOT fastboot",
+        "Command subset only: no is-logical/has-crc/super-partition-name"
+      ]
+    },
+    {
+      "name": "Allwinner Technology (U-Boot fastboot)",
+      "vendorId": "0x1F3A",
+      "productId": "0x1010",
+      "note": "U-Boot fastboot gadget on Orange Pi, Banana Pi and other Allwinner boards.",
+      "bootloaderEntry": "fastboot usb 0 in U-Boot console",
+      "knownLimitations": [
+        "Command subset only"
+      ]
+    },
+    {
+      "name": "Amlogic (U-Boot fastboot)",
+      "vendorId": "0x1B8E",
+      "productId": null,
+      "note": "Amlogic S9xx/G12x dev boxes and boards with U-Boot fastboot.",
+      "bootloaderEntry": "fastboot in U-Boot console",
+      "knownLimitations": [
+        "Command subset only"
+      ]
+    },
+    {
+      "name": "Raspberry Pi (U-Boot fastboot over USB/TCP)",
+      "vendorId": "0x2C7C",
+      "productId": null,
+      "note": "Raspberry Pi with U-Boot fastboot; VID may vary, often reachable via TCP/UDP network fastboot.",
+      "bootloaderEntry": "fastboot usb 0 or fastboot tcp in U-Boot console",
+      "knownLimitations": [
+        "Network transport preferred (tcp:IP:5554)"
+      ]
+    },
+    {
+      "name": "Huawei / Honor (HarmonyOS/Android fastboot)",
+      "vendorId": "0x12D1",
+      "productId": null,
+      "note": "Fastboot mode on Huawei/Honor phones, tablets and HarmonyOS NEXT devices. HDB/hdc (0x12D1:0x5501 etc.) is a separate debugging protocol.",
+      "bootloaderEntry": "Volume down + power (varies by model); adb reboot bootloader on Android builds",
+      "knownLimitations": [
+        "Some models require signed fastboot images",
+        "HDB/hdc interface is NOT fastboot"
+      ]
+    },
+    {
+      "name": "Samsung (Android fastboot / Odin)",
+      "vendorId": "0x04E8",
+      "productId": null,
+      "note": "Samsung fastboot on some models; Odin mode is a separate protocol.",
+      "bootloaderEntry": "Volume down + power + home (Odin), or fastboot on supported models",
+      "knownLimitations": [
+        "Many Samsung devices use Odin, not fastboot"
+      ]
+    },
+    {
+      "name": "Xiaomi / Redmi (Android fastboot)",
+      "vendorId": "0x2717",
+      "productId": null,
+      "note": "Xiaomi fastboot mode; standard interface on most models.",
+      "bootloaderEntry": "Volume down + power, or adb reboot bootloader",
+      "knownLimitations": []
+    },
+    {
+      "name": "OPPO / OnePlus / Realme (Android fastboot)",
+      "vendorId": "0x22D9",
+      "productId": null,
+      "note": "OnePlus/OPPO/Realme fastboot; OnePlus historically uses 0x22D9 or Google VID.",
+      "bootloaderEntry": "Volume down + power, or adb reboot bootloader",
+      "knownLimitations": []
+    },
+    {
+      "name": "vivo / iQOO (Android fastboot)",
+      "vendorId": "0x2A70",
+      "productId": null,
+      "note": "vivo fastboot mode.",
+      "bootloaderEntry": "Volume up + power, or adb reboot bootloader",
+      "knownLimitations": []
+    },
+    {
+      "name": "Generic U-Boot board (custom VID)",
+      "vendorId": null,
+      "productId": null,
+      "note": "U-Boot builds expose CONFIG_USB_GADGET_VENDOR_NUM/PRODUCT_NUM. Add the exact VID/PID of your board here, or use fastboot -i <VID>.",
+      "bootloaderEntry": "fastboot usb 0 / fastboot udp in U-Boot console",
+      "knownLimitations": [
+        "Command subset only; VID/PID board-specific"
+      ]
+    }
+  ]
+}

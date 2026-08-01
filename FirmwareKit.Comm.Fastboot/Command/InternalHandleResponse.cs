@@ -26,7 +26,10 @@ public partial class FastbootDriver
     {
         FastbootDebug.Log($"HandleResponse()");
         FastbootResponse response = new FastbootResponse();
-        DateTime start = DateTime.Now;
+        // Use the monotonic clock (Stopwatch) for the response timeout so that system
+        // clock adjustments cannot corrupt the deadline, matching AOSP's steady_clock.
+        long startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        long timeoutTicks = (long)(System.Diagnostics.Stopwatch.Frequency * (double)ReadTimeoutSeconds);
         string pendingStatus = string.Empty;
         int pendingOffset = 0;
         StringBuilder? textBuffer = null;
@@ -107,7 +110,7 @@ public partial class FastbootDriver
             return -1;
         }
 
-        while ((DateTime.Now - start) < TimeSpan.FromSeconds(ReadTimeoutSeconds))
+        while ((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) < timeoutTicks)
         {
             byte[] data;
             try
@@ -233,7 +236,7 @@ public partial class FastbootDriver
                         next++;
                     }
                     pendingOffset = next;
-                    start = DateTime.Now;
+                    startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
                     continue;
                 }
                 else if (isData)
@@ -291,8 +294,6 @@ public partial class FastbootDriver
         FastbootDebug.Log($"Response(Timeout)");
         return response;
     }
-
-
 }
 
 

@@ -141,8 +141,6 @@ public partial class FastbootDriver
             OnStepFinished?.Invoke($"Flash {partition}", sw.Elapsed, success);
         }
     }
-
-
 }
 
 
