@@ -8,7 +8,7 @@ public partial class FastbootDriver
     /// <para>使用指定的启动镜像数据启动设备。
     /// 下载镜像数据并发送 boot 命令。</para>
     /// </summary>
-    /// <param name="data">Boot image data bytes. <para>启动镜像数据字节。</param>
+    /// <param name="data">Boot image data bytes. <para>启动镜像数据字节。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse Boot(byte[] data)
     {
@@ -22,8 +22,8 @@ public partial class FastbootDriver
     /// <para>使用来自流的启动镜像启动设备。
     /// 从流下载镜像数据并发送 boot 命令。</para>
     /// </summary>
-    /// <param name="stream">Stream containing boot image data. <para>包含启动镜像数据的流。</param>
-    /// <param name="length">Length of boot image data in bytes. <para>启动镜像数据字节长度。</param>
+    /// <param name="stream">Stream containing boot image data. <para>包含启动镜像数据的流。</para></param>
+    /// <param name="length">Length of boot image data in bytes. <para>启动镜像数据字节长度。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse Boot(Stream stream, long length)
     {
@@ -37,7 +37,7 @@ public partial class FastbootDriver
     /// <para>使用启动镜像文件启动设备。
     /// 读取启动镜像文件并将其发送到设备以启动。</para>
     /// </summary>
-    /// <param name="filePath">Path to the boot image file. <para>启动镜像文件的路径。</param>
+    /// <param name="filePath">Path to the boot image file. <para>启动镜像文件的路径。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse BootFromFile(string filePath)
     {

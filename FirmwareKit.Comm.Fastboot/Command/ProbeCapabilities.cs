@@ -40,15 +40,24 @@ public partial class FastbootDriver
             caps.MaxDownloadSize = parsedMax;
         }
 
+        // max-fetch-size governs the largest single fetch: upload; partition reads larger than
+        // this must be split into offset/len chunks (see FetchToStream). Reported by fastbootd.
+        if (TryGetVar("max-fetch-size", out string? maxFetch) &&
+            TryParseNumericSize(maxFetch, out long parsedFetch) && parsedFetch > 0)
+        {
+            caps.MaxFetchSize = parsedFetch;
+        }
+
+        if (TryGetVar("serialno", out string? serial) && !string.IsNullOrEmpty(serial))
+        {
+            caps.SerialNumber = serial;
+        }
+
         // A device that replies FAIL to an unknown variable yields an empty string here,
         // which must be treated as "not reported" instead of a real (empty) value.
         if (TryGetVar("is-userspace", out string? userspace) && !string.IsNullOrEmpty(userspace))
         {
             caps.IsUserspace = userspace == "yes";
-        }
-        if (TryGetVar("has-crc", out string? crc) && !string.IsNullOrEmpty(crc))
-        {
-            caps.HasCrc = crc == "yes";
         }
         if (TryGetVar("has-slot:boot", out string? hasSlot) && !string.IsNullOrEmpty(hasSlot))
         {
@@ -80,6 +89,27 @@ public partial class FastbootDriver
             logicalSupported = true;
         }
         caps.SupportsLogicalPartitions = logicalSupported;
+
+        // A/B slot health. A non-empty reply to "slot-unbootable:<slot>" / "slot-successful:<slot>"
+        // is a boolean "yes"/"no". An empty reply means the variable is unsupported, so leave the
+        // corresponding capability null rather than treating it as a real value.
+        if (caps.SupportsSlots == true)
+        {
+            if (TryGetVar("slot-unbootable:a", out string? unbootA) && !string.IsNullOrEmpty(unbootA))
+                caps.SlotAUnbootable = unbootA == "yes";
+            if (TryGetVar("slot-unbootable:b", out string? unbootB) && !string.IsNullOrEmpty(unbootB))
+                caps.SlotBUnbootable = unbootB == "yes";
+            if (TryGetVar("slot-successful:a", out string? succA) && !string.IsNullOrEmpty(succA))
+                caps.SlotASuccessful = succA == "yes";
+            if (TryGetVar("slot-successful:b", out string? succB) && !string.IsNullOrEmpty(succB))
+                caps.SlotBSuccessful = succB == "yes";
+        }
+
+        // Sparse CRC support is announced via the "sparse-crc" getvar on modern fastbootd.
+        if (TryGetVar("sparse-crc", out string? sparseCrc) && !string.IsNullOrEmpty(sparseCrc))
+        {
+            caps.SupportsSparseCrc = sparseCrc == "yes";
+        }
 
         Capabilities = caps;
         return caps;

@@ -10,13 +10,14 @@ namespace FirmwareKit.Comm.Fastboot.Network;
 /// </summary>
 public class TcpTransport : IFastbootBufferedTransport
 {
-    private const int DefaultIoTimeoutMs = 30000;
+    private const int DefaultIoTimeoutMs = 10000;
+    private const int HandshakeTimeoutMs = 30000;
     private readonly TcpClient _client = new();
     private readonly object _ioLock = new();
     private readonly byte[] _readLenBuffer = new byte[8];
     private readonly byte[] _writeLenBuffer = new byte[8];
     private NetworkStream? _stream;
-    private long _messageBytesLeft = 0;
+    private ulong _messageBytesLeft = 0;
 
     /// <summary>
     /// Gets the host address of the TCP connection.
@@ -46,9 +47,9 @@ public class TcpTransport : IFastbootBufferedTransport
         _client.ReceiveTimeout = DefaultIoTimeoutMs;
         _client.SendTimeout = DefaultIoTimeoutMs;
         Task connectTask = _client.ConnectAsync(Host, Port);
-        if (!connectTask.Wait(DefaultIoTimeoutMs))
+        if (!connectTask.Wait(HandshakeTimeoutMs))
         {
-            throw new Exception($"Handshake failed: connect timeout after {DefaultIoTimeoutMs} ms.");
+            throw new Exception($"Handshake failed: connect timeout after {HandshakeTimeoutMs} ms.");
         }
         if (connectTask.IsFaulted)
         {
@@ -130,12 +131,20 @@ public class TcpTransport : IFastbootBufferedTransport
                 {
                     throw new Exception("Failed to read message length from TCP stream.");
                 }
-                _messageBytesLeft = BinaryPrimitives.ReadInt64BigEndian(_readLenBuffer);
+                // AOSP TCP fastboot frames the payload length as a big-endian unsigned 64-bit
+                // integer. The wire-level DATA size field is 32-bit, so any frame larger than
+                // uint.MaxValue is invalid and would overflow the int cast below.
+                ulong frameLength = BinaryPrimitives.ReadUInt64BigEndian(_readLenBuffer);
+                if (frameLength > uint.MaxValue)
+                {
+                    throw new Exception($"Invalid TCP frame length: {frameLength} (exceeds uint.MaxValue).");
+                }
+                _messageBytesLeft = frameLength;
             }
 
-            int toRead = (int)Math.Min(length, _messageBytesLeft);
+            int toRead = (int)Math.Min((ulong)length, _messageBytesLeft);
             int actuallyRead = ReadFully(buffer, offset, toRead);
-            _messageBytesLeft -= actuallyRead;
+            _messageBytesLeft -= (ulong)actuallyRead;
             return actuallyRead;
         }
     }
@@ -147,9 +156,10 @@ public class TcpTransport : IFastbootBufferedTransport
     public long Write(byte[] data, int length)
     {
         if (_stream == null) throw new InvalidOperationException("Stream not initialized");
+        if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
         lock (_ioLock)
         {
-            BinaryPrimitives.WriteInt64BigEndian(_writeLenBuffer, length);
+            BinaryPrimitives.WriteUInt64BigEndian(_writeLenBuffer, (ulong)length);
 
             _stream.Write(_writeLenBuffer, 0, 8);
             _stream.Write(data, 0, length);

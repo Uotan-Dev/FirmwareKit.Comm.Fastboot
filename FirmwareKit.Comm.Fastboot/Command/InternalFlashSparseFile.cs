@@ -14,7 +14,7 @@ public partial class FastbootDriver
         while (low <= high)
         {
             uint mid = low + ((high - low) / 2);
-            using var probe = new SparseImageStream(sparseFile, startBlock, mid, includeCrc: false, fullRange: true, disposeSource: false);
+            using var probe = new SparseImageStream(sparseFile, startBlock, mid, includeCrc: SparseIncludeCrc, fullRange: true, disposeSource: false);
             if (probe.Length <= limit)
             {
                 best = mid;
@@ -35,9 +35,9 @@ public partial class FastbootDriver
     /// <para>将稀疏镜像文件刷写到指定分区。
     /// 如果稀疏镜像超过最大下载大小，则自动分块。</para>
     /// </summary>
-    /// <param name="partition">Target partition to flash (e.g., "system"). <para>目标刷写分区（如 "system"）。</param>
-    /// <param name="sparseFile">The sparse file to flash. <para>要刷写的稀疏文件。</param>
-    /// <param name="maxDownloadSize">Maximum download size in bytes. Use 0 for device default. <para>最大下载大小（字节）。使用 0 表示设备默认值。</param>
+    /// <param name="partition">Target partition to flash (e.g., "system"). <para>目标刷写分区（如 "system"）。</para></param>
+    /// <param name="sparseFile">The sparse file to flash. <para>要刷写的稀疏文件。</para></param>
+    /// <param name="maxDownloadSize">Maximum download size in bytes. Use 0 for device default. <para>最大下载大小（字节）。使用 0 表示设备默认值。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse FlashSparseFile(string partition, SparseFile sparseFile, long maxDownloadSize)
     {
@@ -63,7 +63,7 @@ public partial class FastbootDriver
             {
                 if (partIndex == 0 && startBlock == 0)
                 {
-                    using var singleSparseStream = new SparseImageStream(sparseFile, 0, totalBlocks, includeCrc: false, fullRange: true, disposeSource: false);
+                    using var singleSparseStream = new SparseImageStream(sparseFile, 0, totalBlocks, includeCrc: SparseIncludeCrc, fullRange: true, disposeSource: false);
                     long singleLength = singleSparseStream.Length;
                     var swSingle = System.Diagnostics.Stopwatch.StartNew();
                     var singleDownload = DownloadData(singleSparseStream, singleLength);
@@ -89,7 +89,7 @@ public partial class FastbootDriver
             }
 
             NotifyCurrentStep($"Sending sparse image {partIndex + 1} to {partition}...");
-            using var sparseStream = new SparseImageStream(sparseFile, startBlock, blockCount, includeCrc: false, fullRange: true, disposeSource: false);
+            using var sparseStream = new SparseImageStream(sparseFile, startBlock, blockCount, includeCrc: SparseIncludeCrc, fullRange: true, disposeSource: false);
             long sparseLength = sparseStream.Length;
 
             var swDownload = System.Diagnostics.Stopwatch.StartNew();

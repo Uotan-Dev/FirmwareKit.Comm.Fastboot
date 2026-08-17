@@ -45,14 +45,25 @@ internal class SuperImageBuilder
 
     public void AddGroup(string name, ulong maxSize) => _builder.AddGroup(name, maxSize);
 
-    public SparseFile Build()
+    public SparseFile Build() => Build(0);
+
+    /// <summary>
+    /// Builds a sparse super image for the given block device index (default: first).
+    /// <para>为指定块设备索引构建稀疏 super 镜像（默认：第一个）。</para>
+    /// </summary>
+    /// <param name="blockDeviceIndex">Index into <c>LpMetadata.BlockDevices</c>. <para>LpMetadata.BlockDevices 的索引。</para></param>
+    public SparseFile Build(uint blockDeviceIndex = 0)
     {
         var metadata = _builder.Export();
         var writer = new MetadataWriter();
         var geometryBlob = writer.SerializeGeometry(metadata.Geometry);
         var metadataBlob = writer.SerializeMetadata(metadata);
 
-        var sparseFile = new SparseFile(_blockSize, (long)metadata.BlockDevices[0].Size);
+        if (metadata.BlockDevices.Count == 0)
+            throw new InvalidOperationException("LpMetadata contains no block devices.");
+
+        var bdev = metadata.BlockDevices[(int)Math.Min(blockDeviceIndex, (uint)metadata.BlockDevices.Count - 1)];
+        var sparseFile = new SparseFile(_blockSize, (long)bdev.Size);
 
         sparseFile.AddDontCareChunk(MetadataFormat.LP_PARTITION_RESERVED_BYTES);
         sparseFile.AddRawChunk(geometryBlob);
@@ -69,7 +80,7 @@ internal class SuperImageBuilder
                                  ((long)geometryBlob.Length * 2) +
                                  ((long)metadata.Geometry.MetadataMaxSize * metadata.Geometry.MetadataSlotCount);
 
-        var firstLogicalOffset = (long)metadata.BlockDevices[0].FirstLogicalSector * MetadataFormat.LP_SECTOR_SIZE;
+        var firstLogicalOffset = (long)bdev.FirstLogicalSector * MetadataFormat.LP_SECTOR_SIZE;
 
         if (firstLogicalOffset > metadataEndOffset)
         {
@@ -140,7 +151,7 @@ internal class SuperImageBuilder
             currentLogicalOffset = extentOffset + extentSize;
         }
 
-        var totalDeviceSize = (long)metadata.BlockDevices[0].Size;
+        var totalDeviceSize = (long)bdev.Size;
         var backupMetadataSize = (long)metadata.Geometry.MetadataMaxSize * metadata.Geometry.MetadataSlotCount;
         var backupMetadataStart = totalDeviceSize - backupMetadataSize;
 

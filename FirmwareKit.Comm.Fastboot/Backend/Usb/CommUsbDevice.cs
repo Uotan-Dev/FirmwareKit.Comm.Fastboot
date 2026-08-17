@@ -1,4 +1,4 @@
-using FirmwareKit.Comm.Usb.Abstractions;
+using FirmwareKit.Comm.Abstractions;
 
 namespace FirmwareKit.Comm.Fastboot.Usb;
 
@@ -8,7 +8,16 @@ namespace FirmwareKit.Comm.Fastboot.Usb;
 /// </summary>
 public sealed class CommUsbDevice : UsbDevice
 {
-    private const int DefaultIoTimeoutMs = 30000;
+    /// <summary>
+    /// Per-I/O USB transfer timeout in milliseconds. This is intentionally shorter than
+    /// <see cref="FastbootDriver.ReadTimeoutSeconds"/> so a single stalled bulk transfer does not
+    /// consume the entire response budget, leaving headroom for INFO/TEXT multi-frame replies
+    /// and transport resets.
+    /// <para>单次 USB 传输超时（毫秒）。刻意小于 FastbootDriver.ReadTimeoutSeconds，使一次停滞的
+    /// 批量传输不会耗尽整个响应预算，为 INFO/TEXT 多帧回复与传输重置留出余量。</para>
+    /// </summary>
+    public static int IoTimeoutMs { get; set; } = 10000;
+
     private readonly global::FirmwareKit.Comm.IFirmwareKitComm _comm;
     private readonly UsbDeviceInfo _deviceInfo;
     private readonly bool _forceLibUsb;
@@ -78,7 +87,7 @@ public sealed class CommUsbDevice : UsbDevice
     {
         EnsureSession();
         if (length <= 0) return Array.Empty<byte>();
-        return _session!.Read(length, DefaultIoTimeoutMs);
+        return _session!.Read(length, IoTimeoutMs);
     }
 
     /// <summary>
@@ -93,7 +102,7 @@ public sealed class CommUsbDevice : UsbDevice
         {
             throw new ArgumentOutOfRangeException(nameof(length));
         }
-        return _session!.ReadInto(buffer, offset, length, DefaultIoTimeoutMs);
+        return _session!.ReadInto(buffer, offset, length, IoTimeoutMs);
     }
 
     /// <summary>
@@ -108,7 +117,7 @@ public sealed class CommUsbDevice : UsbDevice
         {
             throw new ArgumentOutOfRangeException(nameof(length));
         }
-        return _session!.Write(data, length, DefaultIoTimeoutMs);
+        return _session!.Write(data, length, IoTimeoutMs);
     }
 
     /// <summary>

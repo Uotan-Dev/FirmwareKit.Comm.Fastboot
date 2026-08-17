@@ -75,6 +75,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
         [Fact(Timeout = 5000)]
         public async Task Udp_Initialize_Success()
         {
+            var cancellationToken = TestContext.Current.CancellationToken;
             await RunWithRetries(async () =>
             {
                 int port = GetFreeUdpPort();
@@ -83,13 +84,14 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 var serverTask = Task.Run(() => { _ = CompleteHandshake(server); });
                 using var transport = new UdpTransport("127.0.0.1", port, TestTimeoutMs, TestMaxAttempts);
                 await serverTask;
-                await Task.Delay(50); // 确保端口释放
+                await Task.Delay(50, cancellationToken); // 确保端口释放
             });
         }
 
         [Fact(Timeout = 5000)]
         public async Task Udp_Initialize_Fail_InvalidVersion()
         {
+            var cancellationToken = TestContext.Current.CancellationToken;
             await RunWithRetries(async () =>
             {
                 int port = GetFreeUdpPort();
@@ -99,13 +101,14 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 var ex = Assert.Throws<Exception>(() => new UdpTransport("127.0.0.1", port, TestTimeoutMs, TestMaxAttempts));
                 Assert.Contains("invalid protocol version", ex.Message);
                 await serverTask;
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken);
             });
         }
 
         [Fact(Timeout = 5000)]
         public async Task Udp_WriteThenRead_Success()
         {
+            var cancellationToken = TestContext.Current.CancellationToken;
             await RunWithRetries(async () =>
             {
                 int port = GetFreeUdpPort();
@@ -142,13 +145,14 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 byte[] read = transport.Read(3);
                 Assert.Equal("bar", Encoding.ASCII.GetString(read));
                 await serverTask;
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken);
             });
         }
 
         [Fact(Timeout = 5000)]
         public async Task Udp_Read_Continuation_Success()
         {
+            var cancellationToken = TestContext.Current.CancellationToken;
             await RunWithRetries(async () =>
             {
                 int port = GetFreeUdpPort();
@@ -185,13 +189,14 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 byte[] read = transport.Read(6);
                 Assert.Equal("barbaz", Encoding.ASCII.GetString(read));
                 await serverTask;
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken);
             });
         }
 
         [Fact(Timeout = 5000)]
         public async Task Udp_Write_OutOfTurnData_Fails()
         {
+            var cancellationToken = TestContext.Current.CancellationToken;
             await RunWithRetries(async () =>
             {
                 int port = GetFreeUdpPort();
@@ -213,13 +218,14 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 using var transport = new UdpTransport("127.0.0.1", port, TestTimeoutMs, TestMaxAttempts);
                 await Assert.ThrowsAsync<Exception>(() => Task.Run(() => transport.Write(Encoding.ASCII.GetBytes("foo"), 3)));
                 await serverTask;
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken);
             });
         }
 
         [Fact(Timeout = 5000)]
         public async Task Udp_Write_ErrorResponse_Fails()
         {
+            var cancellationToken = TestContext.Current.CancellationToken;
             await RunWithRetries(async () =>
             {
                 int port = GetFreeUdpPort();
@@ -241,7 +247,7 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 using var transport = new UdpTransport("127.0.0.1", port, TestTimeoutMs, TestMaxAttempts);
                 await Assert.ThrowsAsync<Exception>(async () => await Task.Run(() => transport.Write(Encoding.ASCII.GetBytes("foo"), 3)));
                 await serverTask;
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken);
             });
         }
 

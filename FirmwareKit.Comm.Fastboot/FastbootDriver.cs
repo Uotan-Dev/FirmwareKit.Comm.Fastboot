@@ -1,7 +1,6 @@
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using FirmwareKit.Lp;
-using System.IO.Compression;
 
 namespace FirmwareKit.Comm.Fastboot;
 
@@ -22,6 +21,17 @@ public partial class FastbootDriver : IDisposable
     /// <para>获取或设置是否在刷写前将稀疏镜像转换为原始镜像。</para>
     /// </summary>
     public bool ConvertSimgToRaw { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether sparse chunks sent to the device carry a per-chunk CRC32 trailer.
+    /// Defaults to false for broad compatibility; set true for fastbootd builds that require
+    /// sparse CRC verification. Devices without CRC support reject chunks carrying a CRC, so
+    /// only enable this when the device advertises sparse CRC support.
+    /// <para>获取或设置发送给设备的稀疏块是否携带逐块 CRC32 尾部。默认 false 以保证广泛兼容；
+    /// 对要求稀疏 CRC 校验的 fastbootd 构建可设为 true。不支持 CRC 的设备会拒绝带 CRC 的块，
+    /// 因此仅在设备声明支持稀疏 CRC 时启用。</para>
+    /// </summary>
+    public static bool SparseIncludeCrc { get; set; } = false;
 
     /// <summary>
     /// Releases the transport and all associated resources.
@@ -183,10 +193,22 @@ public partial class FastbootDriver : IDisposable
     public static int OnceSendDataSize = 512 * 1024;
 
     /// <summary>
-    /// Maximum download size for sparse image transfers.
-    /// <para>稀疏镜像传输的最大下载大小。</para>
+    /// User-configurable ceiling for download/sparse transfers. Defaults to uint.MaxValue (i.e. no
+    /// additional clamp beyond the wire-level DATA size field width). When set lower, it clamps even
+    /// a device-reported "max-download-size" (this is the --sparse-size override). Set it to a
+    /// smaller value to force chunking on hosts with limited RAM.
+    /// <para>下载/稀疏传输的用户可配置上限。默认 uint.MaxValue（即除线协议 DATA 尺寸字段宽度外不额外钳制）。
+    /// 设小后会钳制设备上报的 "max-download-size"（对应 --sparse-size 覆盖）。可在主机内存受限时设小以强制分块。</para>
     /// </summary>
     public static long SparseMaxDownloadSize = uint.MaxValue;
+
+    /// <summary>
+    /// Conservative fallback used only when the device does not report "max-download-size", to
+    /// avoid sending oversized transfers to small-RAM bootloaders (matches SharpFastboot's 256 MiB).
+    /// <para>仅在设备未上报 "max-download-size" 时使用的保守回退值，避免向小内存 bootloader
+    /// 发送过大传输（与 SharpFastboot 的 256 MiB 一致）。</para>
+    /// </summary>
+    public const long FallbackMaxDownloadSize = 256L * 1024 * 1024;
 
     private static readonly string[] VbmetaPartitionNames =
     [
@@ -341,34 +363,27 @@ public partial class FastbootDriver : IDisposable
     {
         FastbootDebug.Log("GetVarAll()");
         _varCache.Clear();
-        try
+        // ThrowIfError surfaces genuine device failures as exceptions; there is no recoverable
+        // path here. Avoid the redundant try/catch (which previously only logged and rethrew)
+        // since it adds no handling and incurs catch-frame overhead on every call.
+        var res = RawCommand("getvar:all").ThrowIfError();
+        FastbootDebug.Log("Command response received. Parsing...");
+        var dict = new Dictionary<string, string>();
+        foreach (var line in res.Info)
         {
-            var res = RawCommand("getvar:all").ThrowIfError();
-            FastbootDebug.Log("Command response received. Parsing...");
-            var dict = new Dictionary<string, string>();
-            foreach (var line in res.Info)
+            int colonIdx = line.LastIndexOf(':');
+            if (colonIdx <= 0) continue;
+
+            string k = line.Substring(0, colonIdx).Trim();
+            string v = line.Substring(colonIdx + 1).TrimStart();
+            FastbootDebug.Log($"Parsed key: {k}, value: {v}");
+            if (!dict.ContainsKey(k))
             {
-                FastbootDebug.Log("Parsing line: " + line);
-                int colonIdx = line.LastIndexOf(':');
-                if (colonIdx > 0)
-                {
-                    string k = line.Substring(0, colonIdx).Trim();
-                    string v = line.Substring(colonIdx + 1).TrimStart();
-                    FastbootDebug.Log($"Parsed key: {k}, value: {v}");
-                    if (!dict.ContainsKey(k))
-                    {
-                        dict[k] = v;
-                        _varCache[k] = v;
-                    }
-                }
+                dict[k] = v;
+                _varCache[k] = v;
             }
-            return dict;
         }
-        catch (Exception ex)
-        {
-            FastbootDebug.Log("Exception in GetVarAll: " + ex);
-            throw;
-        }
+        return dict;
     }
 
     /// <summary>
@@ -535,30 +550,6 @@ public partial class FastbootDriver : IDisposable
     }
 
     /// <summary>
-    /// Flashes all images from a ZIP archive to the device.
-    /// <para>将 ZIP 归档中的所有镜像刷写到设备。</para>
-    /// </summary>
-    public void FlashZip(string zipPath, bool skipValidation = false, bool wipe = false, bool disableVerity = false, bool disableVerification = false)
-    {
-        CancelSnapshotIfNeeded();
-        DumpInfo();
-
-        string tempDir = Path.Combine(Path.GetTempPath(), "FirmwareKit.Comm.Fastboot_Zip_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-
-        try
-        {
-            NotifyCurrentStep($"Extracting ZIP: {Path.GetFileName(zipPath)}");
-            ZipFile.ExtractToDirectory(zipPath, tempDir);
-            FlashAll(tempDir, wipe, false, skipValidation, true, disableVerity, disableVerification);
-        }
-        finally
-        {
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
-        }
-    }
-
-    /// <summary>
     /// Gets the maximum download size supported by the device.
     /// <para>获取设备支持的最大下载大小。</para>
     /// </summary>
@@ -566,28 +557,32 @@ public partial class FastbootDriver : IDisposable
     {
         if (Capabilities?.MaxDownloadSize is long probedMax && probedMax > 0)
         {
+            // The device explicitly reported its limit. Honor it, but still apply the
+            // user-configurable ceiling (SparseMaxDownloadSize, the --sparse-size override)
+            // and the wire-level DATA field width (uint.MaxValue).
             return Math.Min(Math.Min(probedMax, SparseMaxDownloadSize), uint.MaxValue);
         }
 
         string? sizeStr = null;
         try { sizeStr = GetVar("max-download-size"); } catch { }
-        if (string.IsNullOrEmpty(sizeStr)) return SparseMaxDownloadSize;
+
+        if (string.IsNullOrEmpty(sizeStr))
+        {
+            // Device did not report a limit. Use the conservative fallback, still bounded by the
+            // user ceiling so a smaller --sparse-size override is respected.
+            return Math.Min(SparseMaxDownloadSize, FallbackMaxDownloadSize);
+        }
 
         long parsedSize = sizeStr!.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
             ? long.TryParse(sizeStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out var hex) ? hex : -1
             : long.TryParse(sizeStr, out var dec) ? dec : -1;
 
-        return parsedSize <= 0 ? SparseMaxDownloadSize : Math.Min(Math.Min(parsedSize, SparseMaxDownloadSize), uint.MaxValue);
-    }
+        if (parsedSize <= 0)
+        {
+            return Math.Min(SparseMaxDownloadSize, FallbackMaxDownloadSize);
+        }
 
-    /// <summary>
-    /// Checks whether the device supports CRC verification for data transfers.
-    /// <para>检查设备是否支持数据传输的 CRC 校验。</para>
-    /// </summary>
-    public bool HasCrc()
-    {
-        if (Capabilities?.HasCrc is bool probed) return probed;
-        return TryGetVar("has-crc", out var v) && v == "yes";
+        return Math.Min(Math.Min(parsedSize, SparseMaxDownloadSize), uint.MaxValue);
     }
 
     /// <summary>
@@ -748,7 +743,10 @@ public partial class FastbootDriver : IDisposable
     /// </summary>
     public long GetPartitionSizeLong(string partition)
     {
-        if (!TryGetVar("partition-size:" + partition, out var res) || string.IsNullOrEmpty(res)) return 0;
+        // 部分 bootloader（如三星 UFS 机型）在 OKAY 负载前带前导空格（" 0x4000000"），
+        // 与 AOSP strtoull 自动跳过空白的行为保持一致，先 Trim 再解析。
+        if (!TryGetVar("partition-size:" + partition, out var res) || string.IsNullOrWhiteSpace(res)) return 0;
+        res = res.Trim();
         return res.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
             ? Convert.ToInt64(res, 16)
             : Convert.ToInt64(res);
@@ -759,50 +757,14 @@ public partial class FastbootDriver : IDisposable
     /// <para>从设备获取指定分区的原始大小字符串。</para>
     /// </summary>
     public string GetPartitionSize(string partition)
-        => TryGetVar("partition-size:" + partition, out var v) ? v : "";
+        => TryGetVar("partition-size:" + partition, out var v) ? v.Trim() : "";
 
     /// <summary>
     /// Gets the filesystem type of the specified partition.
     /// <para>获取指定分区的文件系统类型。</para>
     /// </summary>
     public string GetPartitionType(string partition)
-        => TryGetVar("partition-type:" + partition, out var v) ? v : "";
-
-    /// <summary>
-    /// Formats a partition locally by creating an empty filesystem image and flashing it.
-    /// <para>通过创建空文件系统镜像并刷写来本地格式化分区。</para>
-    /// </summary>
-    [ExternalToolDependency("mke2fs")]
-    [ExternalToolDependency("make_f2fs")]
-    public void FormatPartitionLocal(string partition, string fsType = "ext4", long size = 0)
-    {
-        if (size <= 0)
-        {
-            if (TryGetVar("partition-size:" + partition, out var res) && !string.IsNullOrEmpty(res))
-            {
-                size = res.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                    ? Convert.ToInt64(res, 16)
-                    : Convert.ToInt64(res);
-            }
-        }
-        if (size <= 0) size = 1024 * 1024 * 32;
-
-        string tmpFile = Path.GetTempFileName();
-        try
-        {
-            switch (fsType)
-            {
-                case "ext4": FileSystemUtil.CreateEmptyExt4(tmpFile, size); break;
-                case "f2fs": FileSystemUtil.CreateEmptyF2fs(tmpFile, size); break;
-                default: throw new NotSupportedException("fs type not supported: " + fsType);
-            }
-            FlashImage(partition, tmpFile);
-        }
-        finally
-        {
-            if (File.Exists(tmpFile)) File.Delete(tmpFile);
-        }
-    }
+        => TryGetVar("partition-type:" + partition, out var v) ? v.Trim() : "";
 
     /// <summary>
     /// Verifies that the device meets the requirements specified in the product info text.

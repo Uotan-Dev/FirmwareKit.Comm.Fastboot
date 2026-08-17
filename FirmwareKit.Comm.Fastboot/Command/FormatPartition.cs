@@ -60,23 +60,20 @@ public partial class FastbootDriver
     private FastbootResponse FormatPartitionInternal(string partition, string? fsType, long? size, string? options)
     {
         NotifyCurrentStep($"Formatting '{partition}'");
-        string command = "format";
-        if (!string.IsNullOrEmpty(fsType))
+
+        // The wire command is always "format:<partition>". The filesystem type is derived
+        // by fastbootd from the partition's slot/type metadata; it is not sent on the wire.
+        // When an explicit size is given for a logical partition, AOSP resizes it first so the
+        // new filesystem fills the requested extent.
+        if (size.HasValue && IsLogicalOptimized(partition))
         {
-            command += ":" + fsType;
-            if (size.HasValue)
+            var resize = ResizeLogicalPartition(partition, size.Value);
+            if (resize.Result != FastbootState.Success)
             {
-                command += ":" + size.Value;
+                return resize;
             }
         }
 
-        command += ":" + partition;
-
-        if (!string.IsNullOrWhiteSpace(options))
-        {
-            command += ":" + options;
-        }
-
-        return RawCommand(command);
+        return RawCommand("format:" + partition);
     }
 }

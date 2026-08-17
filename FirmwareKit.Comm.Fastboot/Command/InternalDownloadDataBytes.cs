@@ -38,7 +38,21 @@ public partial class FastbootDriver
 
         long bytesWritten = 0;
         int length = data.Length;
-        byte[] transferBuffer = ArrayPool<byte>.Shared.Rent(Math.Min(OnceSendDataSize, length));
+
+        // Fast path: payload fits in a single transfer. Write directly from the source array,
+        // avoiding ArrayPool rent/return and a BlockCopy. This covers signatures, boot/vbmeta
+        // images and other small payloads, which are the common case for this byte[] overload.
+        if (length <= OnceSendDataSize)
+        {
+            long written = Transport.Write(data, length);
+            if (written != length)
+            {
+                return new FastbootResponse { Result = FastbootState.Fail, Response = $"Short write: {written}/{length}" };
+            }
+            return HandleResponse();
+        }
+
+        byte[] transferBuffer = ArrayPool<byte>.Shared.Rent(OnceSendDataSize);
         try
         {
             while (bytesWritten < length)

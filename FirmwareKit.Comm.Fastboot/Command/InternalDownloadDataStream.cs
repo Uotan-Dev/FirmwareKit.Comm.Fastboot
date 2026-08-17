@@ -1,5 +1,4 @@
 
-using Force.Crc32;
 using System.Buffers;
 
 namespace FirmwareKit.Comm.Fastboot;
@@ -8,13 +7,13 @@ public partial class FastbootDriver
 {
     /// <summary>
     /// Downloads data from a stream to the device with retry and recovery support.
-    /// Supports seeking streams for automatic retry on failure. Includes CRC verification if the device supports it.
+    /// Supports seeking streams for automatic retry on transport failure.
     /// <para>从流将数据下载到设备，支持重试和恢复。
-    /// 支持查找流以便在故障时自动重试。如果设备支持，则包含 CRC 验证。</para>
+    /// 支持查找流以便在故障时自动重试。</para>
     /// </summary>
     /// <param name="stream">The data stream to download to the device. <para>要下载到设备的数据流。</para></param>
     /// <param name="length">Number of bytes to download. <para>要下载的字节数。</para></param>
-    /// <param name="onEvent">If true, fires progress events during transfer. <para>如果为 true，则在传输期间触发进度事件。</param>
+    /// <param name="onEvent">If true, fires progress events during transfer. <para>如果为 true，则在传输期间触发进度事件。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse DownloadData(Stream stream, long length, bool onEvent = true)
     {
@@ -81,8 +80,6 @@ public partial class FastbootDriver
             };
         }
 
-        bool useCrc = HasCrc();
-
         // AOSP uses %08" PRIx32 which is 8 chars hex with leading zeros
         FastbootResponse response = RawCommand("download:" + length.ToString("x8"));
         if (response.Result != FastbootState.Data)
@@ -101,7 +98,6 @@ public partial class FastbootDriver
 
         byte[] buffer = ArrayPool<byte>.Shared.Rent(OnceSendDataSize);
         long bytesWritten = 0;
-        uint crc = 0;
         try
         {
             while (bytesWritten < length)
@@ -111,11 +107,6 @@ public partial class FastbootDriver
                 if (readSize <= 0)
                 {
                     throw new Exception("stream ended early: " + bytesWritten + "/" + length);
-                }
-
-                if (useCrc)
-                {
-                    crc = Crc32Algorithm.Append(crc, buffer, 0, readSize);
                 }
 
                 long written = Transport.Write(buffer, readSize);
@@ -133,32 +124,6 @@ public partial class FastbootDriver
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        var finalRes = HandleResponse();
-
-        if (useCrc && finalRes.Result == FastbootState.Success)
-        {
-            string resp = finalRes.Response.Trim();
-            if (resp.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    uint deviceCrc = Convert.ToUInt32(resp, 16);
-                    if (deviceCrc != crc)
-                    {
-                        throw new Exception("CRC Mismatch: Device 0x" + deviceCrc.ToString("x8") + " != Host 0x" + crc.ToString("x8"));
-                    }
-                }
-                catch (FormatException)
-                {
-                    return new FastbootResponse
-                    {
-                        Result = FastbootState.Fail,
-                        Response = "invalid CRC response from device: " + resp
-                    };
-                }
-            }
-        }
-
-        return finalRes;
+        return HandleResponse();
     }
 }

@@ -29,19 +29,19 @@ public partial class FastbootDriver
     /// <para>使用头版本 0（传统 Android 格式）创建启动镜像。
     /// 包含内核、可选 ramdisk 和可选第二阶段加载器。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="second">Second stage loader data bytes (optional). <para>第二阶段加载器数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="name">Image name string (optional). <para>镜像名称字符串（可选）。</param>
-    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</param>
-    /// <param name="pageSize">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</param>
-    /// <param name="kernelOffset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</param>
-    /// <param name="ramdiskOffset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</param>
-    /// <param name="secondOffset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</param>
-    /// <param name="tagsOffset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="second">Second stage loader data bytes (optional). <para>第二阶段加载器数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="name">Image name string (optional). <para>镜像名称字符串（可选）。</para></param>
+    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</para></param>
+    /// <param name="pageSize">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</para></param>
+    /// <param name="kernelOffset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</para></param>
+    /// <param name="ramdiskOffset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</para></param>
+    /// <param name="secondOffset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</para></param>
+    /// <param name="tagsOffset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage(byte[] kernel, byte[]? ramdisk, byte[]? second, string? cmdline, string? name, uint baseAddr, uint pageSize, uint kernelOffset = 0x00008000, uint ramdiskOffset = 0x01000000, uint secondOffset = 0x00F00000, uint tagsOffset = 0x00000100, uint osVersion = 0)
     {
         var header = BootImageHeaderV0.Create();
@@ -68,19 +68,19 @@ public partial class FastbootDriver
     /// <para>使用头版本 1 创建启动镜像。
     /// 包含内核、可选 ramdisk 和可选第二阶段加载器。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="second">Second stage loader data bytes (optional). <para>第二阶段加载器数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="name">Image name string (optional). <para>镜像名称字符串（可选）。</param>
-    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</param>
-    /// <param name="pageSize">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</param>
-    /// <param name="kernelOffset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</param>
-    /// <param name="ramdiskOffset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</param>
-    /// <param name="secondOffset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</param>
-    /// <param name="tagsOffset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="second">Second stage loader data bytes (optional). <para>第二阶段加载器数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="name">Image name string (optional). <para>镜像名称字符串（可选）。</para></param>
+    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</para></param>
+    /// <param name="pageSize">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</para></param>
+    /// <param name="kernelOffset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</para></param>
+    /// <param name="ramdiskOffset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</para></param>
+    /// <param name="secondOffset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</para></param>
+    /// <param name="tagsOffset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage1(byte[] kernel, byte[]? ramdisk, byte[]? second, string? cmdline, string? name, uint baseAddr, uint pageSize, uint kernelOffset = 0x00008000, uint ramdiskOffset = 0x01000000, uint secondOffset = 0x00F00000, uint tagsOffset = 0x00000100, uint osVersion = 0)
     {
         var header = BootImageHeaderV1.Create();
@@ -107,21 +107,21 @@ public partial class FastbootDriver
     /// <para>使用头版本 2 创建启动镜像（添加 DTB 支持）。
     /// 包含内核、可选 ramdisk、可选第二阶段加载器和可选 DTB。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="second">Second stage loader data bytes (optional). <para>第二阶段加载器数据字节（可选）。</param>
-    /// <param name="dtb">Device tree blob data bytes (optional). <para>设备树 blob 数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="name">Image name string (optional). <para>镜像名称字符串（可选）。</param>
-    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</param>
-    /// <param name="pageSize">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</param>
-    /// <param name="kernelOffset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</param>
-    /// <param name="ramdiskOffset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</param>
-    /// <param name="secondOffset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</param>
-    /// <param name="tagsOffset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</param>
-    /// <param name="dtbOffset">DTB offset in memory. Default is 0x01100000. <para>DTB 内存偏移。默认为 0x01100000。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="second">Second stage loader data bytes (optional). <para>第二阶段加载器数据字节（可选）。</para></param>
+    /// <param name="dtb">Device tree blob data bytes (optional). <para>设备树 blob 数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="name">Image name string (optional). <para>镜像名称字符串（可选）。</para></param>
+    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</para></param>
+    /// <param name="pageSize">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</para></param>
+    /// <param name="kernelOffset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</para></param>
+    /// <param name="ramdiskOffset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</para></param>
+    /// <param name="secondOffset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</para></param>
+    /// <param name="tagsOffset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</para></param>
+    /// <param name="dtbOffset">DTB offset in memory. Default is 0x01100000. <para>DTB 内存偏移。默认为 0x01100000。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage2(byte[] kernel, byte[]? ramdisk, byte[]? second, byte[]? dtb, string? cmdline, string? name, uint baseAddr, uint pageSize, uint kernelOffset = 0x00008000, uint ramdiskOffset = 0x01000000, uint secondOffset = 0x00F00000, uint tagsOffset = 0x00000100, uint dtbOffset = 0x01100000, uint osVersion = 0)
     {
         var header = BootImageHeaderV2.Create();
@@ -166,11 +166,11 @@ public partial class FastbootDriver
     /// <para>使用头版本 3 创建启动镜像（GKI 格式，无第二阶段）。
     /// 包含内核和可选 ramdisk。使用固定 4096 字节页面大小。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage3(byte[] kernel, byte[]? ramdisk, string? cmdline, uint osVersion)
     {
         const int pageSize = 4096;
@@ -178,7 +178,8 @@ public partial class FastbootDriver
         header.KernelSize = (uint)kernel.Length;
         header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
         header.OsVersion = osVersion;
-        header.HeaderSize = pageSize;
+        // AOSP sets header_size = sizeof(boot_img_hdr_v3) (= 1580), not the page size.
+        header.HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV3>();
         header.HeaderVersion = 3;
 
         CopyToHeaderCmdline(header.Cmdline, cmdline, 1536);
@@ -192,12 +193,12 @@ public partial class FastbootDriver
     /// <para>使用头版本 4 创建启动镜像（添加签名支持）。
     /// 包含内核、可选 ramdisk 和可选签名。使用固定 4096 字节页面大小。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <param name="signature">Signature data bytes (optional). <para>签名数据字节（可选）。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <param name="signature">Signature data bytes (optional). <para>签名数据字节（可选）。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage4(byte[] kernel, byte[]? ramdisk, string? cmdline, uint osVersion, byte[]? signature = null)
     {
         const int pageSize = 4096;
@@ -205,7 +206,8 @@ public partial class FastbootDriver
         header.KernelSize = (uint)kernel.Length;
         header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
         header.OsVersion = osVersion;
-        header.HeaderSize = pageSize;
+        // AOSP sets header_size = sizeof(boot_img_hdr_v4) (= 1584), not the page size.
+        header.HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV4>();
         header.HeaderVersion = 4;
         header.SignatureSize = (uint)(signature?.Length ?? 0);
 
@@ -220,13 +222,13 @@ public partial class FastbootDriver
     /// <para>使用头版本 5 创建启动镜像（添加 vendor bootconfig）。
     /// 包含内核、可选 ramdisk、可选签名和可选 vendor bootconfig。使用固定 4096 字节页面大小。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <param name="signature">Signature data bytes (optional). <para>签名数据字节（可选）。</param>
-    /// <param name="bootconfig">Vendor bootconfig data bytes (optional). <para>Vendor bootconfig 数据字节（可选）。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <param name="signature">Signature data bytes (optional). <para>签名数据字节（可选）。</para></param>
+    /// <param name="bootconfig">Vendor bootconfig data bytes (optional). <para>Vendor bootconfig 数据字节（可选）。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage5(byte[] kernel, byte[]? ramdisk, string? cmdline, uint osVersion, byte[]? signature = null, byte[]? bootconfig = null)
     {
         const int pageSize = 4096;
@@ -234,7 +236,8 @@ public partial class FastbootDriver
         header.KernelSize = (uint)kernel.Length;
         header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
         header.OsVersion = osVersion;
-        header.HeaderSize = pageSize;
+        // AOSP sets header_size = sizeof(boot_img_hdr_v5) (= 1588), not the page size.
+        header.HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV5>();
         header.HeaderVersion = 5;
         header.SignatureSize = (uint)(signature?.Length ?? 0);
         header.VendorBootconfigSize = (uint)(bootconfig?.Length ?? 0);
@@ -250,13 +253,13 @@ public partial class FastbootDriver
     /// <para>使用头版本 6 创建启动镜像（最新，添加保留字节）。
     /// 包含内核、可选 ramdisk、可选签名和可选 vendor bootconfig。使用固定 4096 字节页面大小。</para>
     /// </summary>
-    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</param>
-    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
-    /// <param name="signature">Signature data bytes (optional). <para>签名数据字节（可选）。</param>
-    /// <param name="bootconfig">Vendor bootconfig data bytes (optional). <para>Vendor bootconfig 数据字节（可选）。</param>
-    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</returns>
+    /// <param name="kernel">Kernel image data bytes. <para>内核镜像数据字节。</para></param>
+    /// <param name="ramdisk">Ramdisk image data bytes (optional). <para>Ramdisk 镜像数据字节（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="osVersion">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
+    /// <param name="signature">Signature data bytes (optional). <para>签名数据字节（可选）。</para></param>
+    /// <param name="bootconfig">Vendor bootconfig data bytes (optional). <para>Vendor bootconfig 数据字节（可选）。</para></param>
+    /// <returns>Byte array containing the complete boot image. <para>包含完整启动镜像的字节数组。</para></returns>
     public byte[] CreateBootImage6(byte[] kernel, byte[]? ramdisk, string? cmdline, uint osVersion, byte[]? signature = null, byte[]? bootconfig = null)
     {
         const int pageSize = 4096;
@@ -264,7 +267,8 @@ public partial class FastbootDriver
         header.KernelSize = (uint)kernel.Length;
         header.RamdiskSize = (uint)(ramdisk?.Length ?? 0);
         header.OsVersion = osVersion;
-        header.HeaderSize = pageSize;
+        // AOSP sets header_size = sizeof(boot_img_hdr_v6) (= 1604), not the page size.
+        header.HeaderSize = (uint)Marshal.SizeOf<BootImageHeaderV6>();
         header.HeaderVersion = 6;
         header.SignatureSize = (uint)(signature?.Length ?? 0);
         header.VendorBootconfigSize = (uint)(bootconfig?.Length ?? 0);
@@ -280,13 +284,13 @@ public partial class FastbootDriver
     /// <para>使用头版本 3 创建 vendor 启动镜像。
     /// 包含 vendor ramdisk 和 DTB。用于具有 vendor boot 分区的设备。</para>
     /// </summary>
-    /// <param name="ramdisk">Vendor ramdisk data bytes. <para>Vendor ramdisk 数据字节。</param>
-    /// <param name="dtb">Device tree blob data bytes. <para>设备树 blob 数据字节。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="productName">Product name string (optional). <para>产品名称字符串（可选）。</param>
-    /// <param name="pageSize">Flash page size. Default is 4096. <para>闪存页面大小。默认为 4096。</param>
-    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</param>
-    /// <returns>Byte array containing the complete vendor boot image. <para>包含完整 vendor 启动镜像的字节数组。</returns>
+    /// <param name="ramdisk">Vendor ramdisk data bytes. <para>Vendor ramdisk 数据字节。</para></param>
+    /// <param name="dtb">Device tree blob data bytes. <para>设备树 blob 数据字节。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="productName">Product name string (optional). <para>产品名称字符串（可选）。</para></param>
+    /// <param name="pageSize">Flash page size. Default is 4096. <para>闪存页面大小。默认为 4096。</para></param>
+    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</para></param>
+    /// <returns>Byte array containing the complete vendor boot image. <para>包含完整 vendor 启动镜像的字节数组。</para></returns>
     public byte[] CreateVendorBootImage3(byte[] ramdisk, byte[] dtb, string? cmdline, string? productName, uint pageSize = 4096, uint baseAddr = 0x10000000)
     {
         var header = VendorBootImageHeaderV3.Create();
@@ -323,14 +327,14 @@ public partial class FastbootDriver
     /// <para>使用头版本 4 创建 vendor 启动镜像（添加 vendor ramdisk 表和 bootconfig）。
     /// 包含 vendor ramdisk、DTB 和可选 bootconfig。用于具有 vendor boot 分区的设备。</para>
     /// </summary>
-    /// <param name="ramdisk">Vendor ramdisk data bytes. <para>Vendor ramdisk 数据字节。</param>
-    /// <param name="dtb">Device tree blob data bytes. <para>设备树 blob 数据字节。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="productName">Product name string (optional). <para>产品名称字符串（可选）。</param>
-    /// <param name="bootconfig">Vendor bootconfig data bytes (optional). <para>Vendor bootconfig 数据字节（可选）。</param>
-    /// <param name="pageSize">Flash page size. Default is 4096. <para>闪存页面大小。默认为 4096。</param>
-    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</param>
-    /// <returns>Byte array containing the complete vendor boot image. <para>包含完整 vendor 启动镜像的字节数组。</returns>
+    /// <param name="ramdisk">Vendor ramdisk data bytes. <para>Vendor ramdisk 数据字节。</para></param>
+    /// <param name="dtb">Device tree blob data bytes. <para>设备树 blob 数据字节。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="productName">Product name string (optional). <para>产品名称字符串（可选）。</para></param>
+    /// <param name="bootconfig">Vendor bootconfig data bytes (optional). <para>Vendor bootconfig 数据字节（可选）。</para></param>
+    /// <param name="pageSize">Flash page size. Default is 4096. <para>闪存页面大小。默认为 4096。</para></param>
+    /// <param name="baseAddr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</para></param>
+    /// <returns>Byte array containing the complete vendor boot image. <para>包含完整 vendor 启动镜像的字节数组。</para></returns>
     public byte[] CreateVendorBootImage4(byte[] ramdisk, byte[] dtb, string? cmdline, string? productName, byte[]? bootconfig = null, uint pageSize = 4096, uint baseAddr = 0x10000000)
     {
         var header = VendorBootImageHeaderV4.Create();

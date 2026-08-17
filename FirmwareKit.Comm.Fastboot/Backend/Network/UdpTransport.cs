@@ -14,10 +14,12 @@ public class UdpTransport : IFastbootBufferedTransport
     private readonly UdpClient _client;
     private readonly IPEndPoint _endpoint;
     private int _sequence = 0;
-    private int _maxDataLength = 512 - 4;
+    private int _maxDataLength = HostMaxPacketSize - HeaderSize;
     private readonly int _timeoutMs;
     private const int HeaderSize = 4;
-    private const int HostMaxPacketSize = 512;
+    // AOSP udp.h: kHostMaxPacketSize = 8192 (host-advertised max), kMinPacketSize = 512.
+    private const ushort HostMaxPacketSize = 8192;
+    private const ushort MinPacketSize = 512;
 
     private enum PacketId : byte
     {
@@ -88,7 +90,7 @@ public class UdpTransport : IFastbootBufferedTransport
         ushort packetSize = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(2, 2));
 
         if (version < 1) throw new Exception($"Target reported invalid protocol version {version}");
-        if (packetSize < HostMaxPacketSize) throw new Exception($"Target reported invalid packet size {packetSize}");
+        if (packetSize < MinPacketSize) throw new Exception($"Target reported invalid packet size {packetSize}");
 
         packetSize = (ushort)Math.Min(HostMaxPacketSize, (int)packetSize);
         _maxDataLength = packetSize - HeaderSize;

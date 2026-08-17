@@ -38,8 +38,8 @@ public static class VbmetaUtils
     /// Converts VbmetaImageFlags to AVB VBMetaImageFlags.
     /// <para>将 VbmetaImageFlags 转换为 AVB VBMetaImageFlags。</para>
     /// </summary>
-    /// <param name="flags">The vbmeta image flags to convert. <para>要转换的 vbmeta 镜像标志。</param>
-    /// <returns>The corresponding AVB VBMetaImageFlags value. <para>对应的 AVB VBMetaImageFlags 值。</returns>
+    /// <param name="flags">The vbmeta image flags to convert. <para>要转换的 vbmeta 镜像标志。</para></param>
+    /// <returns>The corresponding AVB VBMetaImageFlags value. <para>对应的 AVB VBMetaImageFlags 值。</para></returns>
     public static AvbVBMetaImageFlags ToAvbVBMetaImageFlags(VbmetaImageFlags flags)
     {
         var result = AvbVBMetaImageFlags.None;
@@ -54,8 +54,8 @@ public static class VbmetaUtils
     /// Converts AVB VBMetaImageFlags to VbmetaImageFlags.
     /// <para>将 AVB VBMetaImageFlags 转换为 VbmetaImageFlags。</para>
     /// </summary>
-    /// <param name="flags">The AVB flags to convert. <para>要转换的 AVB 标志。</param>
-    /// <returns>The corresponding VbmetaImageFlags value. <para>对应的 VbmetaImageFlags 值。</returns>
+    /// <param name="flags">The AVB flags to convert. <para>要转换的 AVB 标志。</para></param>
+    /// <returns>The corresponding VbmetaImageFlags value. <para>对应的 VbmetaImageFlags 值。</para></returns>
     public static VbmetaImageFlags FromAvbVBMetaImageFlags(AvbVBMetaImageFlags flags)
     {
         var result = VbmetaImageFlags.None;

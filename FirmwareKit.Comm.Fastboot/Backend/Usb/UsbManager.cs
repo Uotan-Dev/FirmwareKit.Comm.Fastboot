@@ -1,4 +1,4 @@
-using FirmwareKit.Comm.Usb.Abstractions;
+using FirmwareKit.Comm.Abstractions;
 using System.Runtime.InteropServices;
 
 namespace FirmwareKit.Comm.Fastboot.Usb;

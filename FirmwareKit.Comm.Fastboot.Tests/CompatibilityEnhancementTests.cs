@@ -105,7 +105,6 @@ namespace FirmwareKit.Comm.Fastboot.Tests
                 ["version-bootloader"] = "U-Boot 2023.01",
                 ["max-download-size"] = "0x10000000",
                 ["is-userspace"] = "no",
-                ["has-crc"] = "yes",
                 ["has-slot:boot"] = "no",
                 ["slot-count"] = "1",
                 ["current-slot"] = "_a",
@@ -121,7 +120,6 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Assert.Equal("U-Boot 2023.01", caps.BootloaderVersion);
             Assert.Equal(0x10000000, caps.MaxDownloadSize);
             Assert.False(caps.IsUserspace);
-            Assert.True(caps.HasCrc);
             Assert.False(caps.SupportsSlots);
             Assert.Equal(1, caps.SlotCount);
             Assert.Equal("a", caps.CurrentSlot);
@@ -141,7 +139,6 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             Assert.Null(caps.ProtocolVersion);
             Assert.Null(caps.MaxDownloadSize);
             Assert.Null(caps.IsUserspace);
-            Assert.Null(caps.HasCrc);
             Assert.Null(caps.SuperPartitionName);
             Assert.False(caps.SupportsLogicalPartitions);
         }
@@ -159,19 +156,6 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             int commandCount = transport.Commands.Count;
             Assert.True(driver.IsUserspace());
             Assert.Equal(commandCount, transport.Commands.Count); // no extra getvar
-        }
-
-        [Fact]
-        public void HasCrc_UsesProbedCapabilities()
-        {
-            var transport = new VarTableTransport(new Dictionary<string, string>
-            {
-                ["has-crc"] = "yes",
-            });
-            var driver = new FastbootDriver(transport);
-
-            driver.ProbeCapabilities();
-            Assert.True(driver.HasCrc());
         }
 
         [Fact]

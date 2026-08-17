@@ -1,6 +1,5 @@
 using CommandLine;
 using FirmwareKit.Comm.Fastboot.Cli.Options;
-using FirmwareKit.Comm.Fastboot;
 using FirmwareKit.Comm.Fastboot.Network;
 using FirmwareKit.Comm.Fastboot.Usb;
 using System.Globalization;
@@ -10,6 +9,48 @@ namespace FirmwareKit.Comm.Fastboot.Cli;
 class Program
 {
     private const int DefaultNetworkPort = 5554;
+
+    // AOSP fastboot.cpp 输出模型：Status() 打印 "%-50s " 状态前缀并记录起始时刻，
+    // Epilog() 在命令结束后打印 "OKAY [%7.3fs]" 或 "FAILED (...)"。
+    private static readonly System.Diagnostics.Stopwatch StatusTimer = new();
+    private static bool StatusPending;
+
+    private static void Status(string? message)
+    {
+        if (!string.IsNullOrEmpty(message))
+        {
+            Console.Error.Write(string.Format(CultureInfo.InvariantCulture, "{0,-50} ", message));
+        }
+        StatusTimer.Restart();
+        StatusPending = true;
+    }
+
+    private static void Epilog(bool ok, string? error = null)
+    {
+        if (!StatusPending) return;
+        if (ok)
+        {
+            Console.Error.WriteLine(string.Format(CultureInfo.InvariantCulture, "OKAY [{0,7:F3}s]", StatusTimer.Elapsed.TotalSeconds));
+        }
+        else
+        {
+            Console.Error.WriteLine(string.Format(CultureInfo.InvariantCulture, "FAILED ({0})", error ?? ""));
+        }
+        StatusPending = false;
+    }
+
+    // AOSP DumpInfo() 中的分隔线与对齐标签是逐字直出（不走 Status 状态行），
+    // "waiting for any device >" 也是 AOSP 原样打印的提示行。
+    // 注意：flash/erase 等步骤消息（如 "Sending raw image to boot..."）含 "..." 后缀，
+    // 但必须走 Status 状态行并在命令结束后得到 OKAY/FAILED，因此不能用 "..." 一刀切。
+    private static bool IsPlainStep(string message)
+    {
+        return message.StartsWith("----", StringComparison.Ordinal) ||
+               message.StartsWith("waiting for", StringComparison.OrdinalIgnoreCase) ||
+               message.StartsWith("Bootloader Version", StringComparison.Ordinal) ||
+               message.StartsWith("Baseband Version", StringComparison.Ordinal) ||
+               message.StartsWith("Serial Number", StringComparison.Ordinal);
+    }
 
     private static readonly HashSet<string> CommandTokens = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -258,12 +299,7 @@ class Program
 
         WireUpDriverEvents(util);
 
-        var stepResults = new List<(string Step, TimeSpan Duration, bool Success)>();
-        util.OnStepFinished = (step, duration, success) =>
-        {
-            if (step.StartsWith("Flash") || step.StartsWith("Flashing"))
-                stepResults.Add((step, duration, success));
-        };
+        var totalTimer = System.Diagnostics.Stopwatch.StartNew();
 
         for (int segIdx = 0; segIdx < commandSegments.Count; segIdx++)
         {
@@ -285,21 +321,35 @@ class Program
             }
         }
 
-        if (commandSegments.Any(s => s[0] is "flash" or "flashall" or "update"))
-        {
-            foreach (var (step, duration, success) in stepResults)
-            {
-                Console.Error.WriteLine($"{step,-30} {(success ? "Success" : "Failed"),-4} Time: {duration.TotalSeconds:F2} s");
-            }
-        }
+        // AOSP: 所有命令完成后打印 "Finished. Total time: %.3fs"。
+        Epilog(true); // 闭合可能残留的未决状态行（无则空操作）
+        Console.Error.WriteLine(string.Format(CultureInfo.InvariantCulture,
+            "Finished. Total time: {0:F3}s", totalTimer.Elapsed.TotalSeconds));
     }
 
     private static void WireUpDriverEvents(FastbootDriver util)
     {
+        // AOSP InfoMessage(): INFO 行打印 "(bootloader) %s"；TextMessage(): TEXT 原样输出。
         util.ReceivedFromDevice += (s, e) =>
         {
             if (e.NewInfo != null) Console.Error.WriteLine("(bootloader) " + e.NewInfo);
             if (e.NewText != null) Console.Error.Write(e.NewText);
+        };
+
+        // AOSP Status()/Epilog()：步骤开始打印 "%-50s " 前缀，命令完成后打印 OKAY/FAILED。
+        util.CurrentStepChanged += (s, step) =>
+        {
+            if (string.IsNullOrEmpty(step)) return;
+            if (IsPlainStep(step))
+            {
+                Epilog(true); // 闭合前一条未决状态行（若有），再直出普通行
+                Console.Error.WriteLine(step);
+                StatusPending = false;
+            }
+            else
+            {
+                Status(step);
+            }
         };
 
         util.CommandCompleted += (s, e) =>
@@ -308,34 +358,44 @@ class Program
             var command = e.Command;
             var response = e.Response;
 
-            if (response.Result == FastbootState.Fail)
+            if (response.Result == FastbootState.Fail || response.Result == FastbootState.Timeout)
             {
-                if (command.StartsWith("snapshot-update", StringComparison.OrdinalIgnoreCase))
-                    Console.Error.WriteLine($"Snapshot                                           FAILED (remote: '{response.Response}')");
-                else if (!command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase))
-                    Console.Error.WriteLine($"FAILED (remote: '{response.Response}')");
+                string error = response.Result == FastbootState.Fail
+                    ? $"remote: '{response.Response}'"
+                    : "Status read timeout";
+                // getvar 失败按 AOSP DisplayVarOrError 语义：Status("getvar:x") + "FAILED (...)"，
+                // 不中断后续命令。
+                if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string key = command.Substring("getvar:".Length);
+                    Console.Error.Write(string.Format(CultureInfo.InvariantCulture, "{0,-50} ", "getvar:" + key));
+                    Console.Error.WriteLine($"FAILED ({error})");
+                    StatusPending = false;
+                }
+                else
+                {
+                    Epilog(false, error);
+                    throw new Exception("Command failed");
+                }
                 return;
             }
 
-            if (string.IsNullOrEmpty(response.Response)) return;
-
+            // 成功：getvar 按 AOSP DisplayVarOrError 输出 "label: value"（不打印 OKAY 状态行）；
+            // 其他命令闭合 Status 前缀打印 "OKAY [%7.3fs]"。无步骤消息的命令（continue、
+            // shutdown、get_staged 等）AOSP 的 epilog 同样打印 OKAY，这里补一个空 Status。
             if (command.StartsWith("getvar:", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(command, "getvar:all", StringComparison.OrdinalIgnoreCase))
             {
                 string key = command.Substring("getvar:".Length);
                 bool alreadyPrinted = response.Info.Any(x => x.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase));
+                StatusPending = false;
                 if (!alreadyPrinted)
                     Console.Error.WriteLine($"{key}: {response.Response}");
+                return;
             }
-            else if (!command.StartsWith("getvar:all", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.Error.WriteLine(response.Response);
-            }
-        };
 
-        util.CurrentStepChanged += (s, step) =>
-        {
-            if (!string.IsNullOrEmpty(step)) Console.Error.WriteLine(step);
+            if (!StatusPending) Status(null);
+            Epilog(true);
         };
     }
 
@@ -480,10 +540,20 @@ class Program
             })
             .WithParsed<WipeSuperVerb>(opts =>
             {
-                if (opts.SuperEmpty != null)
-                    util.UpdateSuper("super", opts.SuperEmpty, true).ThrowIfError();
-                else
-                    util.WipeSuper("super").ThrowIfError();
+                // AOSP wipe-super: with no explicit super_empty, look it up in $ANDROID_PRODUCT_OUT
+                // (find_item_given_name("super_empty.img")); fall back to the raw protocol command
+                // when the image is unavailable.
+                string? empty = opts.SuperEmpty;
+                if (string.IsNullOrEmpty(empty))
+                {
+                    string? productOut = Environment.GetEnvironmentVariable("ANDROID_PRODUCT_OUT");
+                    if (!string.IsNullOrEmpty(productOut))
+                    {
+                        string candidate = Path.Combine(productOut, "super_empty.img");
+                        if (File.Exists(candidate)) empty = candidate;
+                    }
+                }
+                util.WipeSuper("super", empty).ThrowIfError();
             })
             .WithParsed<SignatureVerb>(opts =>
             {

@@ -66,12 +66,19 @@ public class FastbootResponse
 /// </summary>
 public enum FastbootState
 {
+    /// <summary>The command completed successfully (OKAY). <para>命令成功完成（OKAY）。</para></summary>
     Success,
+    /// <summary>The device reported a failure (FAIL). <para>设备报告失败（FAIL）。</para></summary>
     Fail,
+    /// <summary>The device sent a TEXT frame. <para>设备发送了 TEXT 帧。</para></summary>
     Text,
+    /// <summary>The device sent a DATA frame announcing a payload. <para>设备发送了 DATA 帧，声明后续负载。</para></summary>
     Data,
+    /// <summary>The device sent an INFO frame. <para>设备发送了 INFO 帧。</para></summary>
     Info,
+    /// <summary>The device sent an unrecognized status code. <para>设备发送了无法识别的状态码。</para></summary>
     Unknown,
+    /// <summary>No response was received before the timeout. <para>在超时前未收到响应。</para></summary>
     Timeout
 }
 

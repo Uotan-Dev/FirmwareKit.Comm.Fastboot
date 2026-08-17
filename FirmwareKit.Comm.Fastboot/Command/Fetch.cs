@@ -62,7 +62,10 @@ public partial class FastbootDriver
             while (fetched < size)
             {
                 long chunk = Math.Min(maxFetchSize, size - fetched);
-                string cmd = $"fetch:{targetPartition}:0x{fetched:x8}:0x{chunk:x8}";
+                // AOSP fastboot_driver.cpp FetchToFd 用 ":0x%08PRIx64"（0x 前缀 + 8 位零填充）；
+                // 本地采用裸小写 hex（{x}），fastbootd 用 strtoull 以 16 为基数解析，两种格式
+                // 均可接受，且裸 hex 不受 32 位宽度截断影响。
+                string cmd = $"fetch:{targetPartition}:{fetched:x}:{chunk:x}";
                 var res = UploadData(cmd, output);
                 if (res.Result != FastbootState.Success) return res;
                 fetched += chunk;
@@ -110,7 +113,7 @@ public partial class FastbootDriver
             while (fetched < size)
             {
                 long chunk = Math.Min(maxFetchSize, size - fetched);
-                string cmd = $"fetch:{targetPartition}:0x{(offset + fetched):x8}:0x{chunk:x8}";
+                string cmd = $"fetch:{targetPartition}:{(offset + fetched):x}:{chunk:x}";
                 var res = UploadData(cmd, output);
                 if (res.Result != FastbootState.Success) return res;
                 fetched += chunk;
@@ -119,10 +122,10 @@ public partial class FastbootDriver
             return new FastbootResponse { Result = FastbootState.Success };
         }
 
-        string finalCmd = $"fetch:{targetPartition}:0x{offset:x8}";
+        string finalCmd = $"fetch:{targetPartition}:{offset:x}";
         if (size >= 0)
         {
-            finalCmd += $":0x{size:x8}";
+            finalCmd += $":{size:x}";
         }
 
         return UploadData(finalCmd, output);

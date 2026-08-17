@@ -29,7 +29,7 @@ public enum UsbMatchMode
 /// Describes a known fastboot-capable device identified by vendor/product id,
 /// used as a discovery fallback for devices with non-standard interface descriptors.
 /// <para>描述一个已知支持 fastboot 协议、以厂商/产品 ID 标识的设备，
-    /// 用于兜底发现接口描述符非标准的设备。</para>
+/// 用于兜底发现接口描述符非标准的设备。</para>
 /// </summary>
 public sealed class FastbootDeviceProfile
 {

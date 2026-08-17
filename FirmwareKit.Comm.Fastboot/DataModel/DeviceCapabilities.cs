@@ -30,16 +30,52 @@ public sealed class DeviceCapabilities
     public long? MaxDownloadSize { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum fetch (upload from device) size in bytes, or null when unknown.
+    /// <para>获取或设置设备支持的最大 fetch（从设备上传）大小（字节），未知时为 null。</para>
+    /// </summary>
+    public long? MaxFetchSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device serial number, or null when not reported.
+    /// <para>获取或设置设备序列号，未上报时为 null。</para>
+    /// </summary>
+    public string? SerialNumber { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether slot "a" is marked unbootable, or null when slots are unsupported/unknown.
+    /// <para>获取或设置槽位 "a" 是否被标记为不可引导，不支持/未知时为 null。</para>
+    /// </summary>
+    public bool? SlotAUnbootable { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether slot "b" is marked unbootable, or null when slots are unsupported/unknown.
+    /// <para>获取或设置槽位 "b" 是否被标记为不可引导，不支持/未知时为 null。</para>
+    /// </summary>
+    public bool? SlotBUnbootable { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether slot "a" booted successfully, or null when slots are unsupported/unknown.
+    /// <para>获取或设置槽位 "a" 是否引导成功，不支持/未知时为 null。</para>
+    /// </summary>
+    public bool? SlotASuccessful { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether slot "b" booted successfully, or null when slots are unsupported/unknown.
+    /// <para>获取或设置槽位 "b" 是否引导成功，不支持/未知时为 null。</para>
+    /// </summary>
+    public bool? SlotBSuccessful { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the device supports/reports sparse CRC, or null when unknown.
+    /// <para>获取或设置设备是否支持/上报稀疏镜像 CRC，未知时为 null。</para>
+    /// </summary>
+    public bool? SupportsSparseCrc { get; set; }
+
+    /// <summary>
     /// Gets or sets whether the device is running userspace fastboot (fastbootd), or null when unsupported/unknown.
     /// <para>获取或设置设备是否运行用户空间 fastboot（fastbootd），不支持/未知时为 null。</para>
     /// </summary>
     public bool? IsUserspace { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether the device supports CRC verification of downloads, or null when unsupported/unknown.
-    /// <para>获取或设置设备是否支持下载 CRC 校验，不支持/未知时为 null。</para>
-    /// </summary>
-    public bool? HasCrc { get; set; }
 
     /// <summary>
     /// Gets or sets whether the device supports A/B slots (has-slot), or null when unsupported/unknown.

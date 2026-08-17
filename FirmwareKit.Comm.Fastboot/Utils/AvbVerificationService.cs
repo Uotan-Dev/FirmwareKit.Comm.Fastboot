@@ -145,10 +145,10 @@ public class AvbVerificationService
     /// Verifies the integrity of an AVB vbmeta image from raw bytes.
     /// <para>从原始字节验证 AVB vbmeta 镜像的完整性。</para>
     /// </summary>
-    /// <param name="data">The raw vbmeta image data. <para>原始 vbmeta 镜像数据。</param>
-    /// <returns>An AvbVerificationResult containing the verification outcome. <para>包含验证结果的 AvbVerificationResult。</para>
-    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</exception>
-    /// <exception cref="ArgumentException">Thrown when data is empty. <para>当 data 为空时抛出。</exception>
+    /// <param name="data">The raw vbmeta image data. <para>原始 vbmeta 镜像数据。</para></param>
+    /// <returns>An AvbVerificationResult containing the verification outcome. <para>包含验证结果的 AvbVerificationResult。</para></returns>
+    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</para></exception>
+    /// <exception cref="ArgumentException">Thrown when data is empty. <para>当 data 为空时抛出。</para></exception>
     public AvbVerificationResult VerifyVbmetaImage(byte[] data)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -224,11 +224,11 @@ public class AvbVerificationService
     /// Verifies the integrity of an AVB vbmeta image from a file.
     /// <para>从文件验证 AVB vbmeta 镜像的完整性。</para>
     /// </summary>
-    /// <param name="filePath">The path to the vbmeta image file. <para>vbmeta 镜像文件的路径。</param>
-    /// <returns>An AvbVerificationResult containing the verification outcome. <para>包含验证结果的 AvbVerificationResult。</para>
-    /// <exception cref="ArgumentException">Thrown when filePath is null or whitespace. <para>当 filePath 为 null 或空白时抛出。</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the file does not exist. <para>当文件不存在时抛出。</exception>
-    /// <exception cref="IOException">Thrown when the file cannot be read. <para>当文件无法读取时抛出。</exception>
+    /// <param name="filePath">The path to the vbmeta image file. <para>vbmeta 镜像文件的路径。</para></param>
+    /// <returns>An AvbVerificationResult containing the verification outcome. <para>包含验证结果的 AvbVerificationResult。</para></returns>
+    /// <exception cref="ArgumentException">Thrown when filePath is null or whitespace. <para>当 filePath 为 null 或空白时抛出。</para></exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist. <para>当文件不存在时抛出。</para></exception>
+    /// <exception cref="IOException">Thrown when the file cannot be read. <para>当文件无法读取时抛出。</para></exception>
     public AvbVerificationResult VerifyVbmetaFile(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path is required.", nameof(filePath));
@@ -251,11 +251,11 @@ public class AvbVerificationService
     /// Computes a hash of the data using the specified AVB algorithm type.
     /// <para>使用指定的 AVB 算法类型计算数据的哈希值。</para>
     /// </summary>
-    /// <param name="data">The data to hash. <para>要哈希的数据。</param>
-    /// <param name="algorithmType">The AVB algorithm type to use. <para>要使用的 AVB 算法类型。</param>
-    /// <returns>An AvbHashResult containing the computed hash. <para>包含计算哈希结果的 AvbHashResult。</para>
-    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</exception>
-    /// <exception cref="ArgumentException">Thrown when data is empty. <para>当 data 为空时抛出。</exception>
+    /// <param name="data">The data to hash. <para>要哈希的数据。</para></param>
+    /// <param name="algorithmType">The AVB algorithm type to use. <para>要使用的 AVB 算法类型。</para></param>
+    /// <returns>An AvbHashResult containing the computed hash. <para>包含计算哈希结果的 AvbHashResult。</para></returns>
+    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</para></exception>
+    /// <exception cref="ArgumentException">Thrown when data is empty. <para>当 data 为空时抛出。</para></exception>
     public AvbHashResult ComputeHash(byte[] data, AvbAlgorithmType algorithmType)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -292,12 +292,12 @@ public class AvbVerificationService
     /// Computes a salted hash of the data using the specified algorithm name and salt.
     /// <para>使用指定的算法名称和盐值计算数据的加盐哈希值。</para>
     /// </summary>
-    /// <param name="data">The data to hash. <para>要哈希的数据。</param>
-    /// <param name="algorithmName">The name of the hash algorithm to use. <para>要使用的哈希算法名称。</param>
-    /// <param name="salt">The salt value to use for hashing. <para>用于哈希的盐值。</param>
-    /// <returns>An AvbHashResult containing the computed salted hash. <para>包含计算加盐哈希结果的 AvbHashResult。</para>
-    /// <exception cref="ArgumentNullException">Thrown when data, algorithmName, or salt is null. <para>当 data、algorithmName 或 salt 为 null 时抛出。</exception>
-    /// <exception cref="ArgumentException">Thrown when data is empty or algorithmName is whitespace. <para>当 data 为空或 algorithmName 为空白时抛出。</exception>
+    /// <param name="data">The data to hash. <para>要哈希的数据。</para></param>
+    /// <param name="algorithmName">The name of the hash algorithm to use. <para>要使用的哈希算法名称。</para></param>
+    /// <param name="salt">The salt value to use for hashing. <para>用于哈希的盐值。</para></param>
+    /// <returns>An AvbHashResult containing the computed salted hash. <para>包含计算加盐哈希结果的 AvbHashResult。</para></returns>
+    /// <exception cref="ArgumentNullException">Thrown when data, algorithmName, or salt is null. <para>当 data、algorithmName 或 salt 为 null 时抛出。</para></exception>
+    /// <exception cref="ArgumentException">Thrown when data is empty or algorithmName is whitespace. <para>当 data 为空或 algorithmName 为空白时抛出。</para></exception>
     public AvbHashResult ComputeSaltedHash(byte[] data, string algorithmName, byte[] salt)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -330,11 +330,11 @@ public class AvbVerificationService
     /// Verifies a signature against data using a public key.
     /// <para>使用公钥验证数据上的签名。</para>
     /// </summary>
-    /// <param name="data">The data whose signature is being verified. <para>正在验证签名的数据。</param>
-    /// <param name="signature">The signature to verify. <para>要验证的签名。</param>
-    /// <param name="publicKey">The RSA public key used for verification. <para>用于验证的 RSA 公钥。</param>
-    /// <returns>An AvbSignatureResult containing the verification outcome. <para>包含验证结果的 AvbSignatureResult。</para>
-    /// <exception cref="ArgumentNullException">Thrown when data, signature, or publicKey is null. <para>当 data、signature 或 publicKey 为 null 时抛出。</exception>
+    /// <param name="data">The data whose signature is being verified. <para>正在验证签名的数据。</para></param>
+    /// <param name="signature">The signature to verify. <para>要验证的签名。</para></param>
+    /// <param name="publicKey">The RSA public key used for verification. <para>用于验证的 RSA 公钥。</para></param>
+    /// <returns>An AvbSignatureResult containing the verification outcome. <para>包含验证结果的 AvbSignatureResult。</para></returns>
+    /// <exception cref="ArgumentNullException">Thrown when data, signature, or publicKey is null. <para>当 data、signature 或 publicKey 为 null 时抛出。</para></exception>
     public AvbSignatureResult VerifySignature(byte[] data, byte[] signature, byte[] publicKey)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -376,9 +376,9 @@ public class AvbVerificationService
     /// Parses and extracts an AVB footer from the end of a vbmeta image.
     /// <para>从 vbmeta 镜像末尾解析并提取 AVB footer。</para>
     /// </summary>
-    /// <param name="data">The raw vbmeta image data. <para>原始 vbmeta 镜像数据。</param>
-    /// <returns>The AvbFooter if present and valid, otherwise null. <para>如果存在且有效则返回 AvbFooter，否则返回 null。</returns>
-    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</exception>
+    /// <param name="data">The raw vbmeta image data. <para>原始 vbmeta 镜像数据。</para></param>
+    /// <returns>The AvbFooter if present and valid, otherwise null. <para>如果存在且有效则返回 AvbFooter，否则返回 null。</para></returns>
+    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</para></exception>
     public AvbFooter? ParseFooter(byte[] data)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -397,10 +397,10 @@ public class AvbVerificationService
     /// Extracts all AVB descriptors from a vbmeta image.
     /// <para>从 vbmeta 镜像提取所有 AVB 描述符。</para>
     /// </summary>
-    /// <param name="data">The raw vbmeta image data. <para>原始 vbmeta 镜像数据。</param>
-    /// <returns>A list of AvbDescriptor objects found in the image. <para>在镜像中找到的 AvbDescriptor 对象列表。</para>
-    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</exception>
-    /// <exception cref="ArgumentException">Thrown when data is empty. <para>当 data 为空时抛出。</exception>
+    /// <param name="data">The raw vbmeta image data. <para>原始 vbmeta 镜像数据。</para></param>
+    /// <returns>A list of AvbDescriptor objects found in the image. <para>在镜像中找到的 AvbDescriptor 对象列表。</para></returns>
+    /// <exception cref="ArgumentNullException">Thrown when data is null. <para>当 data 为 null 时抛出。</para></exception>
+    /// <exception cref="ArgumentException">Thrown when data is empty. <para>当 data 为空时抛出。</para></exception>
     public List<AvbDescriptor> ExtractDescriptors(byte[] data)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -422,8 +422,8 @@ public class AvbVerificationService
     /// Determines whether the given data appears to be a valid AVB vbmeta image.
     /// <para>判断给定的数据是否看起来是有效的 AVB vbmeta 镜像。</para>
     /// </summary>
-    /// <param name="data">The data to check. <para>要检查的数据。</param>
-    /// <returns>True if the data starts with the AVB magic bytes "AVB0"; otherwise, false. <para>如果数据以 AVB 魔术字节 "AVB0" 开头则返回 true；否则返回 false。</para>
+    /// <param name="data">The data to check. <para>要检查的数据。</para></param>
+    /// <returns>True if the data starts with the AVB magic bytes "AVB0"; otherwise, false. <para>如果数据以 AVB 魔术字节 "AVB0" 开头则返回 true；否则返回 false。</para></returns>
     public bool IsVbmetaImage(byte[] data)
     {
         if (data == null || data.Length < 4) return false;
@@ -434,8 +434,8 @@ public class AvbVerificationService
     /// Determines whether the specified file appears to be a valid AVB vbmeta image.
     /// <para>判断指定文件是否看起来是有效的 AVB vbmeta 镜像。</para>
     /// </summary>
-    /// <param name="filePath">The path to the file to check. <para>要检查的文件的路径。</param>
-    /// <returns>True if the file exists and starts with the AVB magic bytes "AVB0"; otherwise, false. <para>如果文件存在且以 AVB 魔术字节 "AVB0" 开头则返回 true；否则返回 false。</para>
+    /// <param name="filePath">The path to the file to check. <para>要检查的文件的路径。</para></param>
+    /// <returns>True if the file exists and starts with the AVB magic bytes "AVB0"; otherwise, false. <para>如果文件存在且以 AVB 魔术字节 "AVB0" 开头则返回 true；否则返回 false。</para></returns>
     public bool IsVbmetaFile(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;

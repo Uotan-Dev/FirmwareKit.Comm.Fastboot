@@ -10,8 +10,8 @@ automation. Part of the **FirmwareKit** ecosystem.
 ## Features
 
 - **AOSP Aligned**: Command framing, response parsing (`OKAY/FAIL/INFO/DATA/TEXT`), `download:%08x`
-  size fields, sparse chunked flashing, and CRC verification (`has-crc`) follow the official Google
-  `fastboot` implementation byte-for-byte.
+  size fields, TCP/UDP handshakes, and sparse chunked flashing follow the official Google
+  `fastboot` implementation.
 - **Multi-Transport**:
   - USB — via `FirmwareKit.Comm` (WinUSB / Linux / macOS native + libusb-dotnet backends)
   - Fastboot over TCP (`FB01` handshake, AOSP framing)
@@ -26,7 +26,7 @@ automation. Part of the **FirmwareKit** ecosystem.
 - **Rich Command Set**: flash / flashall / update / erase / format / fetch / upload / boot /
   logical partitions / super update / vbmeta flags / snapshot-update / gsi / flashing lock
   & unlock / oem (incl. U-Boot `ucmd`/`acmd`/`run`) / signature / sideload / stage / get_staged.
-- **Multi-Targeting**: `netstandard2.0`, `netstandard2.1`, `net6.0`, `net8.0`, `net10.0`.
+- **Multi-Targeting**: `netstandard2.0`, `net8.0`, `net10.0`.
   Native AOT and trimming compatible.
 
 ## Installation
@@ -35,7 +35,7 @@ automation. Part of the **FirmwareKit** ecosystem.
 dotnet add package FirmwareKit.Comm.Fastboot
 ```
 
-> Latest published version on NuGet: **1.0.1**.
+> Latest published version on NuGet: **1.1.0**.
 > See the dependency table in [NuGet Dependencies](#nuget-dependencies) for the published
 > ecosystem packages this library builds upon.
 
@@ -128,10 +128,9 @@ This library is built on the following **published** FirmwareKit ecosystem packa
 
 | Package | Purpose | Latest published |
 |---|---|---|
-| [FirmwareKit.Comm](https://www.nuget.org/packages/FirmwareKit.Comm) | Cross-platform USB enumeration & sessions (WinUSB/Linux/macOS/libusb) | 1.0.0 |
+| [FirmwareKit.Comm](https://www.nuget.org/packages/FirmwareKit.Comm) | Cross-platform USB enumeration & sessions (WinUSB/Linux/macOS/libusb) | 1.2.1 |
 | [FirmwareKit.Lp](https://www.nuget.org/packages/FirmwareKit.Lp) | Android super logical-partition metadata (parse / build / export) | 1.0.0 |
 | [FirmwareKit.Sparse](https://www.nuget.org/packages/FirmwareKit.Sparse) | Android sparse image parsing, random access, resparsing, CRC | 1.1.0 |
-| Crc32.NET | CRC32 for `has-crc` download verification | 1.2.0 |
 
 Other **published** ecosystem packages you may find useful alongside fastboot:
 
@@ -152,8 +151,6 @@ Other **published** ecosystem packages you may find useful alongside fastboot:
   legacy devices. Use `-i <VID>` in the CLI to filter by vendor id.
 - **Non-Android devices** (U-Boot boards, HarmonyOS bootloaders, Kindle, …): discovered via the
   interface rule; advanced features degrade automatically via `ProbeCapabilities()`.
-- See `docs/PROJECT_GUIDE.md` for the full project structure, per-device fastboot entry methods,
-  Windows driver (Zadig / HiSuite) and Linux udev setup, and ecosystem reuse guidance.
 
 ## Requirements
 
@@ -171,7 +168,8 @@ builder, capability probing, device profile loading, and AOSP driver parity.
 
 ## Credits
 
-- Based on AOSP `system/core/fastboot` (reference sources under `fastboot/` in this repository).
+- Based on AOSP `system/core/fastboot` (the reference implementation; see the audit notes in
+  this repository's commit history for protocol parity details).
 - Part of the **FirmwareKit** ecosystem by **uotan-Dev**.
 
 ## License

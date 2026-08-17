@@ -155,11 +155,6 @@ namespace FirmwareKit.Comm.Fastboot.Tests
             public long Write(byte[] data, int length)
             {
                 string command = Encoding.UTF8.GetString(data, 0, length);
-                if (command.Equals("getvar:has-crc", StringComparison.OrdinalIgnoreCase))
-                {
-                    _readQueue.Enqueue(Encoding.UTF8.GetBytes("OKAYno"));
-                    return length;
-                }
 
                 if (command.StartsWith("download:", StringComparison.OrdinalIgnoreCase))
                 {
@@ -566,22 +561,6 @@ namespace FirmwareKit.Comm.Fastboot.Tests
 
             Assert.Equal(FastbootState.Fail, response.Result);
             Assert.Contains("download size mismatch", response.Response);
-        }
-
-        [Fact]
-        public void DownloadDataStream_MalformedCrcResponse_Fails()
-        {
-            var transport = new MockTransport();
-            transport.EnqueueResponse("OKAYyes");
-            transport.EnqueueResponse("DATA00000004");
-            transport.EnqueueResponse("OKAY0xGGGGGGGG");
-            var util = new FastbootDriver(transport);
-
-            using var stream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
-            var response = util.DownloadData(stream, 4);
-
-            Assert.Equal(FastbootState.Fail, response.Result);
-            Assert.Contains("invalid CRC response", response.Response);
         }
 
         [Fact]

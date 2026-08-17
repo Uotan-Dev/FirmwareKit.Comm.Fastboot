@@ -22,6 +22,12 @@ public partial class FastbootDriver
             return new FastbootResponse { Result = FastbootState.Fail, Response = "invalid image size" };
         }
 
+        // Resolve the A/B slot suffix once, consistently with ErasePartition/FormatPartition/
+        // FlashRawProtocol, so callers may pass the base partition name (e.g. "system").
+        string targetPartition = HasSlot(partition)
+            ? partition + "_" + GetCurrentSlot()
+            : partition;
+
         bool canSeek = stream.CanSeek;
         long originalPosition = canSeek ? stream.Position : 0;
         long maxDownloadSize = GetMaxDownloadSize();
@@ -41,10 +47,10 @@ public partial class FastbootDriver
             stream.Seek(originalPosition, SeekOrigin.Begin);
         }
 
-        if (IsLogicalOptimized(partition))
+        if (IsLogicalOptimized(targetPartition))
         {
             // Match AOSP behavior: logical partitions are resized to image logical size before flashing.
-            ResizeLogicalPartition(partition, imageSize);
+            ResizeLogicalPartition(targetPartition, imageSize);
         }
 
         // log sizes so that callers can understand why we convert to sparse
@@ -56,7 +62,7 @@ public partial class FastbootDriver
         {
             if (isSparse && ConvertSimgToRaw)
             {
-                NotifyCurrentStep($"Converting sparse image to raw image for {partition}...");
+                NotifyCurrentStep($"Converting sparse image to raw image for {targetPartition}...");
                 stream.Seek(originalPosition, SeekOrigin.Begin);
 
                 using var tempSparseImage = new TempFile("fastboot_sparse_", ".img");
@@ -74,19 +80,19 @@ public partial class FastbootDriver
                     sparseStream.CopyTo(rawStream);
                 }
 
-                NotifyCurrentStep($"Flashing raw image to {partition}...");
+                NotifyCurrentStep($"Flashing raw image to {targetPartition}...");
                 using (var rawFileStream = tempRawImage.OpenRead())
                 {
-                    var resp = FlashRawImage(partition, rawFileStream, rawFileStream.Length);
+                    var resp = FlashRawImage(targetPartition, rawFileStream, rawFileStream.Length);
                     success = resp.Result == FastbootState.Success;
                     return resp;
                 }
             }
             else if (isSparse)
             {
-                NotifyCurrentStep($"Flashing sparse image to {partition}...");
+                NotifyCurrentStep($"Flashing sparse image to {targetPartition}...");
                 using var sparseImage = SparseFile.ImportAuto(stream, validateCrc: false, verbose: false);
-                var resp = FlashSparseFile(partition, sparseImage, maxDownloadSize);
+                var resp = FlashSparseFile(targetPartition, sparseImage, maxDownloadSize);
                 success = resp.Result == FastbootState.Success;
                 return resp;
             }
@@ -95,7 +101,7 @@ public partial class FastbootDriver
             if (imageSize <= maxDownloadSize)
             {
                 if (canSeek) stream.Seek(originalPosition, SeekOrigin.Begin);
-                var resp = FlashRawImage(partition, stream, imageSize);
+                var resp = FlashRawImage(targetPartition, stream, imageSize);
                 success = resp.Result == FastbootState.Success;
                 return resp;
             }
@@ -109,7 +115,7 @@ public partial class FastbootDriver
                 };
             }
 
-            NotifyCurrentStep($"Converting large raw image to sparse chunks for {partition}...");
+            NotifyCurrentStep($"Converting large raw image to sparse chunks for {targetPartition}...");
             stream.Seek(originalPosition, SeekOrigin.Begin);
 
             const int blockSize = 4096;
@@ -131,14 +137,14 @@ public partial class FastbootDriver
                 rawSparseImage.AddRawChunk(rawData);
             }
 
-            var rawResp = FlashSparseFile(partition, rawSparseImage, maxDownloadSize);
+            var rawResp = FlashSparseFile(targetPartition, rawSparseImage, maxDownloadSize);
             success = rawResp.Result == FastbootState.Success;
             return rawResp;
         }
         finally
         {
             sw.Stop();
-            OnStepFinished?.Invoke($"Flash {partition}", sw.Elapsed, success);
+            OnStepFinished?.Invoke($"Flash {targetPartition}", sw.Elapsed, success);
         }
     }
 }

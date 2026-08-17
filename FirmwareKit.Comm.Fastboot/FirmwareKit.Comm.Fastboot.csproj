@@ -1,15 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1;net6.0;net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Authors>ZZi_Cai</Authors>
-    <Description>A high-performance .NET implementation of the Android Fastboot protocol, strictly aligned with AOSP logic. Part of the FirmwareKit ecosystem.</Description>
+    <Description>A .NET library implementing the Android Fastboot protocol, aligned with AOSP semantics, for firmware flashing and device automation. Part of the FirmwareKit ecosystem.</Description>
     <PackageProjectUrl>https://github.com/Uotan-Dev/FirmwareKit.Comm.Fastboot</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Uotan-Dev/FirmwareKit.Comm.Fastboot</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -20,8 +21,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>fastboot;android;firmware;flashing;usb;tcp;udp;adb</PackageTags>
     <Copyright>Copyright (c) 2026 ZZi_Cai</Copyright>
-    <PackageReleaseNotes>1.1.0 - Multi-command CLI (CommandLineParser), -i vendor-id filter, official devices -l format, device capability probing, VID/PID whitelist discovery (devices.json), AOT-safe manifest loader, U-Boot oem ucmd/acmd, monotonic timeouts, AVB-based vbmeta flag editing.</PackageReleaseNotes>
-    <Version>1.1.0</Version>
+    <PackageReleaseNotes>1.2.0 - CLI output strictly aligned with AOSP fastboot (Status/OKAY/FAILED/Total time), FirmwareKit.Comm dependency pinned to published 1.2.1, partition-size values trimmed for real-device compatibility.</PackageReleaseNotes>
+    <Version>1.2.0</Version>
     <PackageId>FirmwareKit.Comm.Fastboot</PackageId>
     <Product>FirmwareKit.Comm.Fastboot</Product>
   </PropertyGroup>
@@ -31,11 +32,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Crc32.NET" Version="1.2.0" />
-    <PackageReference Include="FirmwareKit.AVB" Version="1.1.0" />
-    <PackageReference Include="FirmwareKit.Comm" Version="1.0.0" />
+    <PackageReference Include="FirmwareKit.AVB" Version="1.2.0" />
+    <PackageReference Include="FirmwareKit.Comm" Version="1.2.1" />
     <PackageReference Include="FirmwareKit.Lp" Version="1.0.0" />
     <PackageReference Include="FirmwareKit.Sparse" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

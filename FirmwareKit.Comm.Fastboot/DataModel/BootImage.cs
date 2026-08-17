@@ -11,34 +11,49 @@ namespace FirmwareKit.Comm.Fastboot;
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV0
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Kernel load address. <para>内核加载地址。</para></summary>
     public uint KernelAddr;
 
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>Ramdisk load address. <para>Ramdisk 加载地址。</para></summary>
     public uint RamdiskAddr;
 
+    /// <summary>Second stage loader size in bytes. <para>第二阶段加载器大小（字节）。</para></summary>
     public uint SecondSize;
+    /// <summary>Second stage loader load address. <para>第二阶段加载器加载地址。</para></summary>
     public uint SecondAddr;
 
+    /// <summary>Tags load address. <para>Tags 加载地址。</para></summary>
     public uint TagsAddr;
+    /// <summary>Flash page size in bytes. <para>闪存页大小（字节）。</para></summary>
     public uint PageSize;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
 
+    /// <summary>Product name string. <para>产品名称字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Name;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
     public byte[] Cmdline;
 
+    /// <summary>SHA-1 digest IDs of the image components. <para>镜像组件的 SHA-1 摘要 ID。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public uint[] Id;
 
+    /// <summary>Extra command line data. <para>额外命令行数据。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1024)]
     public byte[] ExtraCmdline;
 
@@ -66,37 +81,58 @@ public struct BootImageHeaderV0
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV1
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Kernel load address. <para>内核加载地址。</para></summary>
     public uint KernelAddr;
 
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>Ramdisk load address. <para>Ramdisk 加载地址。</para></summary>
     public uint RamdiskAddr;
 
+    /// <summary>Second stage loader size in bytes. <para>第二阶段加载器大小（字节）。</para></summary>
     public uint SecondSize;
+    /// <summary>Second stage loader load address. <para>第二阶段加载器加载地址。</para></summary>
     public uint SecondAddr;
 
+    /// <summary>Tags load address. <para>Tags 加载地址。</para></summary>
     public uint TagsAddr;
+    /// <summary>Flash page size in bytes. <para>闪存页大小（字节）。</para></summary>
     public uint PageSize;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
 
+    /// <summary>Product name string. <para>产品名称字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Name;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
     public byte[] Cmdline;
 
+    /// <summary>SHA-1 digest IDs of the image components. <para>镜像组件的 SHA-1 摘要 ID。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public uint[] Id;
 
+    /// <summary>Extra command line data. <para>额外命令行数据。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1024)]
     public byte[] ExtraCmdline;
 
+    /// <summary>Recovery DTB image size in bytes. <para>Recovery DTB 镜像大小（字节）。</para></summary>
+    public uint RecoveryDtboSize;
+    /// <summary>Recovery DTB image offset in bytes. <para>Recovery DTB 镜像偏移（字节）。</para></summary>
+    public ulong RecoveryDtboOffset;
+
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
 
     /// <summary>
@@ -125,41 +161,68 @@ public struct BootImageHeaderV1
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV2
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Kernel load address. <para>内核加载地址。</para></summary>
     public uint KernelAddr;
 
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>Ramdisk load address. <para>Ramdisk 加载地址。</para></summary>
     public uint RamdiskAddr;
 
+    /// <summary>Second stage loader size in bytes. <para>第二阶段加载器大小（字节）。</para></summary>
     public uint SecondSize;
+    /// <summary>Second stage loader load address. <para>第二阶段加载器加载地址。</para></summary>
     public uint SecondAddr;
 
+    /// <summary>Tags load address. <para>Tags 加载地址。</para></summary>
     public uint TagsAddr;
+    /// <summary>Flash page size in bytes. <para>闪存页大小（字节）。</para></summary>
     public uint PageSize;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
 
+    /// <summary>Product name string. <para>产品名称字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Name;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
     public byte[] Cmdline;
 
+    /// <summary>SHA-1 digest IDs of the image components. <para>镜像组件的 SHA-1 摘要 ID。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public uint[] Id;
 
+    /// <summary>Extra command line data. <para>额外命令行数据。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1024)]
     public byte[] ExtraCmdline;
 
+    /// <summary>Recovery DTB image size in bytes. <para>Recovery DTB 镜像大小（字节）。</para></summary>
+    public uint RecoveryDtboSize;
+    /// <summary>Recovery DTB image offset in bytes. <para>Recovery DTB 镜像偏移（字节）。</para></summary>
+    public ulong RecoveryDtboOffset;
+
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
 
+    /// <summary>Device tree blob size in bytes. <para>设备树 blob 大小（字节）。</para></summary>
     public uint DtbSize;
+    /// <summary>Device tree blob load address. <para>设备树 blob 加载地址。</para></summary>
     public ulong DtbAddr;
+
+    // AOSP boot_img_hdr_v2 is 1664 bytes (4 reserved bytes follow dtb_addr).
+    /// <summary>Reserved header bytes (4 bytes after dtb_addr in v2). <para>保留头字节（v2 中 dtb_addr 后的 4 字节）。</para></summary>
+    public uint Reserved;
 
     /// <summary>
     /// Creates a new BootImageHeaderV2 with default values.
@@ -187,19 +250,27 @@ public struct BootImageHeaderV2
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV3
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
 
+    /// <summary>Reserved header words. <para>保留头字。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
     public uint[] Reserved;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1536)]
     public byte[] Cmdline;
 
@@ -226,22 +297,31 @@ public struct BootImageHeaderV3
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV4
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
 
+    /// <summary>Reserved header words. <para>保留头字。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
     public uint[] Reserved;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1536)]
     public byte[] Cmdline;
 
+    /// <summary>Signature size in bytes (v4+). <para>签名大小（字节，v4+）。</para></summary>
     public uint SignatureSize;
 
     /// <summary>
@@ -267,23 +347,33 @@ public struct BootImageHeaderV4
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV5
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
 
+    /// <summary>Reserved header words. <para>保留头字。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
     public uint[] Reserved;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1536)]
     public byte[] Cmdline;
 
+    /// <summary>Signature size in bytes (v4+). <para>签名大小（字节，v4+）。</para></summary>
     public uint SignatureSize;
+    /// <summary>Vendor bootconfig size in bytes (v5+). <para>Vendor bootconfig 大小（字节，v5+）。</para></summary>
     public uint VendorBootconfigSize;
 
     /// <summary>
@@ -309,25 +399,36 @@ public struct BootImageHeaderV5
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct BootImageHeaderV6
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Kernel image size in bytes. <para>内核镜像大小（字节）。</para></summary>
     public uint KernelSize;
+    /// <summary>Ramdisk image size in bytes. <para>Ramdisk 镜像大小（字节）。</para></summary>
     public uint RamdiskSize;
+    /// <summary>OS version encoded as a single integer. <para>编码为单个整数的 OS 版本。</para></summary>
     public uint OsVersion;
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
 
+    /// <summary>Reserved header words. <para>保留头字。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
     public uint[] Reserved;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1536)]
     public byte[] Cmdline;
 
+    /// <summary>Signature size in bytes (v4+). <para>签名大小（字节，v4+）。</para></summary>
     public uint SignatureSize;
+    /// <summary>Vendor bootconfig size in bytes (v5+). <para>Vendor bootconfig 大小（字节，v5+）。</para></summary>
     public uint VendorBootconfigSize;
 
+    /// <summary>Additional reserved header bytes (v6). <para>额外保留头字节（v6）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Reserved1;
 
@@ -354,25 +455,37 @@ public struct BootImageHeaderV6
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct VendorBootImageHeaderV3
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
+    /// <summary>Flash page size in bytes. <para>闪存页大小（字节）。</para></summary>
     public uint PageSize;
+    /// <summary>Kernel load address. <para>内核加载地址。</para></summary>
     public uint KernelAddr;
+    /// <summary>Ramdisk load address. <para>Ramdisk 加载地址。</para></summary>
     public uint RamdiskAddr;
+    /// <summary>Vendor ramdisk size in bytes. <para>Vendor ramdisk 大小（字节）。</para></summary>
     public uint VendorRamdiskSize;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2048)]
     public byte[] Cmdline;
 
+    /// <summary>Tags load address. <para>Tags 加载地址。</para></summary>
     public uint TagsAddr;
 
+    /// <summary>Product name string. <para>产品名称字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Name;
 
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
+    /// <summary>Device tree blob size in bytes. <para>设备树 blob 大小（字节）。</para></summary>
     public uint DtbSize;
+    /// <summary>Device tree blob load address. <para>设备树 blob 加载地址。</para></summary>
     public ulong DtbAddr;
 
     /// <summary>
@@ -398,30 +511,46 @@ public struct VendorBootImageHeaderV3
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct VendorBootImageHeaderV4
 {
+    /// <summary>Boot image magic bytes ("ANDROID!" or "VNDRBOOT"). <para>启动镜像魔数（"ANDROID!" 或 "VNDRBOOT"）。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
     public byte[] Magic;
 
+    /// <summary>Boot image header version. <para>启动镜像头版本。</para></summary>
     public uint HeaderVersion;
+    /// <summary>Flash page size in bytes. <para>闪存页大小（字节）。</para></summary>
     public uint PageSize;
+    /// <summary>Kernel load address. <para>内核加载地址。</para></summary>
     public uint KernelAddr;
+    /// <summary>Ramdisk load address. <para>Ramdisk 加载地址。</para></summary>
     public uint RamdiskAddr;
+    /// <summary>Vendor ramdisk size in bytes. <para>Vendor ramdisk 大小（字节）。</para></summary>
     public uint VendorRamdiskSize;
 
+    /// <summary>Kernel command line string. <para>内核命令行字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2048)]
     public byte[] Cmdline;
 
+    /// <summary>Tags load address. <para>Tags 加载地址。</para></summary>
     public uint TagsAddr;
 
+    /// <summary>Product name string. <para>产品名称字符串。</para></summary>
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] Name;
 
+    /// <summary>Header size in bytes. <para>头大小（字节）。</para></summary>
     public uint HeaderSize;
+    /// <summary>Device tree blob size in bytes. <para>设备树 blob 大小（字节）。</para></summary>
     public uint DtbSize;
+    /// <summary>Device tree blob load address. <para>设备树 blob 加载地址。</para></summary>
     public ulong DtbAddr;
 
+    /// <summary>Vendor ramdisk table size in bytes. <para>Vendor ramdisk 表大小（字节）。</para></summary>
     public uint VendorRamdiskTableSize;
+    /// <summary>Number of entries in the vendor ramdisk table. <para>Vendor ramdisk 表条目数。</para></summary>
     public uint VendorRamdiskTableEntryNum;
+    /// <summary>Size of each vendor ramdisk table entry. <para>每个 vendor ramdisk 表条目的大小。</para></summary>
     public uint VendorRamdiskTableEntrySize;
+    /// <summary>Bootconfig size in bytes. <para>Bootconfig 大小（字节）。</para></summary>
     public uint BootconfigSize;
 
     /// <summary>
@@ -612,7 +741,8 @@ public class BootImage
     private void ReadData(Stream stream, BootImageHeaderV1 header)
     {
         uint pageSize = header.PageSize;
-        long offset = header.HeaderSize;
+        // header_size is the struct size (1648 for v1); payloads begin at the next page boundary.
+        long offset = (header.HeaderSize + pageSize - 1) / pageSize * pageSize;
         Kernel = ReadPadded(stream, offset, header.KernelSize, pageSize);
         offset += (header.KernelSize + pageSize - 1) / pageSize * pageSize;
         Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, pageSize);
@@ -623,7 +753,8 @@ public class BootImage
     private void ReadData(Stream stream, BootImageHeaderV2 header)
     {
         uint pageSize = header.PageSize;
-        long offset = header.HeaderSize;
+        // header_size is the struct size (1664 for v2); payloads begin at the next page boundary.
+        long offset = (header.HeaderSize + pageSize - 1) / pageSize * pageSize;
         Kernel = ReadPadded(stream, offset, header.KernelSize, pageSize);
         offset += (header.KernelSize + pageSize - 1) / pageSize * pageSize;
         Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, pageSize);
@@ -633,44 +764,48 @@ public class BootImage
 
     private void ReadData(Stream stream, BootImageHeaderV3 header)
     {
-        long offset = header.HeaderSize;
-        Kernel = ReadPadded(stream, offset, header.KernelSize, 4096);
+        const int pageSize = 4096;
+        long offset = (header.HeaderSize + pageSize - 1) / pageSize * pageSize;
+        Kernel = ReadPadded(stream, offset, header.KernelSize, pageSize);
         offset += (header.KernelSize + 4095) / 4096 * 4096;
-        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, 4096);
+        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, pageSize);
     }
 
     private void ReadData(Stream stream, BootImageHeaderV4 header)
     {
-        long offset = header.HeaderSize;
-        Kernel = ReadPadded(stream, offset, header.KernelSize, 4096);
+        const int pageSize = 4096;
+        long offset = (header.HeaderSize + pageSize - 1) / pageSize * pageSize;
+        Kernel = ReadPadded(stream, offset, header.KernelSize, pageSize);
         offset += (header.KernelSize + 4095) / 4096 * 4096;
-        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, 4096);
+        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, pageSize);
         offset += (header.RamdiskSize + 4095) / 4096 * 4096;
-        Signature = ReadPadded(stream, offset, header.SignatureSize, 4096);
+        Signature = ReadPadded(stream, offset, header.SignatureSize, pageSize);
     }
 
     private void ReadData(Stream stream, BootImageHeaderV5 header)
     {
-        long offset = header.HeaderSize;
-        Kernel = ReadPadded(stream, offset, header.KernelSize, 4096);
+        const int pageSize = 4096;
+        long offset = (header.HeaderSize + pageSize - 1) / pageSize * pageSize;
+        Kernel = ReadPadded(stream, offset, header.KernelSize, pageSize);
         offset += (header.KernelSize + 4095) / 4096 * 4096;
-        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, 4096);
+        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, pageSize);
         offset += (header.RamdiskSize + 4095) / 4096 * 4096;
-        Signature = ReadPadded(stream, offset, header.SignatureSize, 4096);
+        Signature = ReadPadded(stream, offset, header.SignatureSize, pageSize);
         offset += (header.SignatureSize + 4095) / 4096 * 4096;
-        Bootconfig = ReadPadded(stream, offset, header.VendorBootconfigSize, 4096);
+        Bootconfig = ReadPadded(stream, offset, header.VendorBootconfigSize, pageSize);
     }
 
     private void ReadData(Stream stream, BootImageHeaderV6 header)
     {
-        long offset = header.HeaderSize;
-        Kernel = ReadPadded(stream, offset, header.KernelSize, 4096);
+        const int pageSize = 4096;
+        long offset = (header.HeaderSize + pageSize - 1) / pageSize * pageSize;
+        Kernel = ReadPadded(stream, offset, header.KernelSize, pageSize);
         offset += (header.KernelSize + 4095) / 4096 * 4096;
-        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, 4096);
+        Ramdisk = ReadPadded(stream, offset, header.RamdiskSize, pageSize);
         offset += (header.RamdiskSize + 4095) / 4096 * 4096;
-        Signature = ReadPadded(stream, offset, header.SignatureSize, 4096);
+        Signature = ReadPadded(stream, offset, header.SignatureSize, pageSize);
         offset += (header.SignatureSize + 4095) / 4096 * 4096;
-        Bootconfig = ReadPadded(stream, offset, header.VendorBootconfigSize, 4096);
+        Bootconfig = ReadPadded(stream, offset, header.VendorBootconfigSize, pageSize);
     }
 
     private void ReadData(Stream stream, VendorBootImageHeaderV3 header)

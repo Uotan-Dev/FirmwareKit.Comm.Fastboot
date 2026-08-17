@@ -11,4 +11,10 @@ public partial class FastbootDriver
         var res = FlashingCommand("get_unlock_ability");
         return res.Result == FastbootState.Success && int.TryParse(res.Response?.Trim(), out int ability) ? ability : 0;
     }
+
+    /// <summary>
+    /// Returns whether the bootloader allows unlocking (get_unlock_ability == 1).
+    /// <para>返回 bootloader 是否允许解锁（get_unlock_ability == 1）。</para>
+    /// </summary>
+    public bool IsUnlockAbilityEnabled() => FlashingGetUnlockAbility() == 1;
 }

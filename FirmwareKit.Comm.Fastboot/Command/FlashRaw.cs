@@ -8,21 +8,21 @@ public partial class FastbootDriver
     /// <para>创建并刷写原始启动镜像到指定分区。
     /// 支持多种启动镜像头版本（0-6）以及可选组件如 ramdisk、第二阶段和 DTB。</para>
     /// </summary>
-    /// <param name="partition">Target partition to flash (e.g., "boot", "recovery"). <para>目标刷写分区（如 "boot"、"recovery"）。</param>
+    /// <param name="partition">Target partition to flash (e.g., "boot", "recovery"). <para>目标刷写分区（如 "boot"、"recovery"）。</para></param>
     /// <param name="kernelPath">Path to the kernel image file. <para>内核镜像文件路径。</para></param>
-    /// <param name="ramdiskPath">Path to the ramdisk image file (optional). <para>ramdisk 镜像文件路径（可选）。</param>
-    /// <param name="secondPath">Path to the second stage loader image file (optional). <para>第二阶段加载器镜像文件路径（可选）。</param>
-    /// <param name="dtbPath">Path to the DTB image file (optional). <para>DTB 镜像文件路径（可选）。</param>
-    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</param>
-    /// <param name="header_version">Boot image header version (0-6). Default is 0. <para>启动镜像头版本（0-6）。默认为 0。</param>
-    /// <param name="base_addr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</param>
-    /// <param name="page_size">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</param>
-    /// <param name="kernel_offset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</param>
-    /// <param name="ramdisk_offset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</param>
-    /// <param name="second_offset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</param>
-    /// <param name="tags_offset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</param>
-    /// <param name="dtb_offset">DTB offset in memory. Default is 0x01100000. <para>DTB 内存偏移。默认为 0x01100000。</param>
-    /// <param name="os_version">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</param>
+    /// <param name="ramdiskPath">Path to the ramdisk image file (optional). <para>ramdisk 镜像文件路径（可选）。</para></param>
+    /// <param name="secondPath">Path to the second stage loader image file (optional). <para>第二阶段加载器镜像文件路径（可选）。</para></param>
+    /// <param name="dtbPath">Path to the DTB image file (optional). <para>DTB 镜像文件路径（可选）。</para></param>
+    /// <param name="cmdline">Kernel command line string (optional). <para>内核命令行字符串（可选）。</para></param>
+    /// <param name="header_version">Boot image header version (0-6). Default is 0. <para>启动镜像头版本（0-6）。默认为 0。</para></param>
+    /// <param name="base_addr">Base memory address. Default is 0x10000000. <para>基本内存地址。默认为 0x10000000。</para></param>
+    /// <param name="page_size">Flash page size. Default is 2048. <para>闪存页面大小。默认为 2048。</para></param>
+    /// <param name="kernel_offset">Kernel offset in memory. Default is 0x00008000. <para>内核内存偏移。默认为 0x00008000。</para></param>
+    /// <param name="ramdisk_offset">Ramdisk offset in memory. Default is 0x01000000. <para>Ramdisk 内存偏移。默认为 0x01000000。</para></param>
+    /// <param name="second_offset">Second stage offset in memory. Default is 0x00F00000. <para>第二阶段内存偏移。默认为 0x00F00000。</para></param>
+    /// <param name="tags_offset">Tags offset in memory. Default is 0x00000100. <para>Tags 内存偏移。默认为 0x00000100。</para></param>
+    /// <param name="dtb_offset">DTB offset in memory. Default is 0x01100000. <para>DTB 内存偏移。默认为 0x01100000。</para></param>
+    /// <param name="os_version">OS version information. Default is 0. <para>操作系统版本信息。默认为 0。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse FlashRaw(string partition, string kernelPath, string? ramdiskPath = null, string? secondPath = null, string? dtbPath = null, string? cmdline = null, uint header_version = 0, uint base_addr = 0x10000000, uint page_size = 2048, uint kernel_offset = 0x00008000, uint ramdisk_offset = 0x01000000, uint second_offset = 0x00F00000, uint tags_offset = 0x00000100, uint dtb_offset = 0x01100000, uint os_version = 0)
     {
@@ -43,9 +43,9 @@ public partial class FastbootDriver
     /// <para>使用 fastboot 协议将原始启动镜像流刷写到指定分区。
     /// 自动处理分区设备的槽位后缀。</para>
     /// </summary>
-    /// <param name="partition">Target partition to flash (e.g., "boot", "recovery"). <para>目标刷写分区（如 "boot"、"recovery"）。</param>
-    /// <param name="stream">Stream containing the boot image data. <para>包含启动镜像数据的流。</param>
-    /// <param name="imageSize">Size of the image in bytes. <para>镜像大小（字节）。</param>
+    /// <param name="partition">Target partition to flash (e.g., "boot", "recovery"). <para>目标刷写分区（如 "boot"、"recovery"）。</para></param>
+    /// <param name="stream">Stream containing the boot image data. <para>包含启动镜像数据的流。</para></param>
+    /// <param name="imageSize">Size of the image in bytes. <para>镜像大小（字节）。</para></param>
     /// <returns>A FastbootResponse indicating the result. <para>指示操作结果的 FastbootResponse。</para></returns>
     public FastbootResponse FlashRawProtocol(string partition, Stream stream, long imageSize)
     {
@@ -73,6 +73,9 @@ public partial class FastbootDriver
         }
 
         NotifyCurrentStep($"Flashing raw boot image to {targetPartition}...");
-        return RawCommand("flash:raw:" + targetPartition);
+        // "flash:raw" is a host-side CLI subcommand that assembles a boot image locally and then
+        // flashes it through the standard "flash:<partition>" wire command. The device protocol
+        // parser splits on ':' so "flash:raw:boot" would target a partition named "raw"; use "flash:".
+        return RawCommand("flash:" + targetPartition);
     }
 }
