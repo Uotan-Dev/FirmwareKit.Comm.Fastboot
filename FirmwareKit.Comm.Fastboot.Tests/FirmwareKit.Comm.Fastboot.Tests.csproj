@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- xunit.v3 with Microsoft Testing Platform requires an executable entry point -->
+    <OutputType>Exe</OutputType>
+    <!-- Opt into the new dotnet test experience (Microsoft Testing Platform),
+         required on .NET 10 SDK where the legacy VSTest target is no longer supported. -->
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,11 +17,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <!-- xunit.v3 ships built-in Microsoft Testing Platform support, so the
+         legacy xunit.runner.visualstudio + Microsoft.NET.Test.Sdk VSTest
+         integration packages are no longer referenced. -->
     <PackageReference Include="xunit.v3" Version="4.0.0" />
   </ItemGroup>
 

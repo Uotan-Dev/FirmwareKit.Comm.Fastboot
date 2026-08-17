@@ -204,6 +204,34 @@ class Program
         return (globalSegment, commandSegments);
     }
 
+    /// <summary>
+    /// Reorders args so the verb (the first CommandToken) is at index 0.
+    /// CommandLineParser's multi-verb ParseArguments overload requires the verb
+    /// to be the first token; without this, global options like "-s &lt;serial&gt;"
+    /// preceding the verb cause "Verb '-s' is not recognized".
+    /// </summary>
+    private static string[] ReorderVerbFirst(string[] args)
+    {
+        if (args.Length == 0) return args;
+        // Already verb-first (args[0] is the verb).
+        if (CommandTokens.Contains(args[0])) return args;
+
+        // Find the verb token, skipping over option values.
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (CommandTokens.Contains(args[i]))
+            {
+                var reordered = new string[args.Length];
+                reordered[0] = args[i];
+                // Append everything before the verb (the global options), then everything after.
+                Array.Copy(args, 0, reordered, 1, i);
+                Array.Copy(args, i + 1, reordered, i + 1, args.Length - i - 1);
+                return reordered;
+            }
+        }
+        return args;
+    }
+
     private static void ExecuteStandaloneCommand(string[] args)
     {
         Parser.Default.ParseArguments<ConnectVerb, DisconnectVerb>(args)
@@ -227,7 +255,7 @@ class Program
         long? sparseLimit = null;
         GlobalOptions? globals = null;
 
-        var firstArgs = globalSegment.Concat(commandSegments[0]).ToArray();
+        var firstArgs = ReorderVerbFirst(globalSegment.Concat(commandSegments[0]).ToArray());
 
         Parser.Default.ParseArguments(firstArgs,
             typeof(FlashVerb), typeof(FlashAllVerb), typeof(UpdateVerb), typeof(EraseVerb),
@@ -308,7 +336,7 @@ class Program
                 var seg = commandSegments[segIdx];
                 var segArgs = segIdx == 0
                     ? firstArgs
-                    : globalSegment.Concat(seg).ToArray();
+                    : ReorderVerbFirst(globalSegment.Concat(seg).ToArray());
 
                 util.ResetTransport();
                 ExecuteSingleCommand(util, segArgs, globals);
